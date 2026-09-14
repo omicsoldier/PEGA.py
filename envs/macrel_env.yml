@@ -1,7 +1,10 @@
 name: macrel_env
 channels:
-  - bioconda
+  # conda-forge MUST come before bioconda: bioconda still ships a 2017-era
+  # urllib3 1.12 (py27-py36 only), and under strict channel priority that
+  # shadows conda-forge's, making requests/pooch/scipy unsolvable.
   - conda-forge
+  - bioconda
   - nodefaults
 
 dependencies:
