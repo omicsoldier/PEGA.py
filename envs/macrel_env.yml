@@ -4,7 +4,7 @@ channels:
   - conda-forge
 
 dependencies:
-  - python=3.8
+  - python=3.10
   - macrel=1.6.0
   - numpy=1.24
   - scikit-learn=1.3
