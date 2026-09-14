@@ -118,10 +118,12 @@ create_macrel_env() {
         ok "macrel_env already exists — skipping."
         return 0
     fi
-
-    # Use the official single-command installation from BigDataBiology/macrel
-    info "Creating macrel_env (conda install -c bioconda macrel) ..."
-    conda create --name macrel_env -c bioconda -c conda-forge macrel -y
+    # Use the pinned envs/macrel_env.yml, not a bare `conda create -c bioconda
+    # macrel`: an unpinned install lets conda resolve a different, untested
+    # dependency tree, which can silently change Macrel's predictions (see
+    # README troubleshooting notes and envs/macrel_env.yml for details).
+    info "Creating macrel_env from envs/macrel_env.yml ..."
+    conda env create -f "${ENVS_DIR}/macrel_env.yml"
     ok "macrel_env created."
 
     # Quick smoke test
