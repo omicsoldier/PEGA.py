@@ -2,19 +2,6 @@ name: macrel_env
 channels:
   - bioconda
   - conda-forge
-  - defaults
-
-# Pinned to the exact dependency versions verified against Macrel's
-# official web server for a known reference AMP. macrel=1.6.0 alone is
-# NOT enough to reproduce results: Macrel bundles a pre-trained
-# scikit-learn model, and loading it with a different scikit-learn/numpy/
-# scipy version can silently change predictions for the same input
-# (no error — just wrong scores). An unpinned `- macrel` dependency list
-# lets conda resolve a completely different, untested dependency tree.
-#
-# If you ever recreate this environment and get different scores than
-# expected, verify it against a known reference AMP before trusting any
-# results (see README troubleshooting notes).
 
 dependencies:
   - python=3.8
