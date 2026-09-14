@@ -14,13 +14,18 @@ Output columns (0-indexed, after skiprows=2)
 1  sequence
 2  AMP_family
 3  is_AMP label
-4  AMP_probability  ← used by PEGA, rescaled from [-1, 1] to [0, 1]
+4  AMP_probability  ← used by PEGA
 5  Hemolytic label
 6  Hemolytic_probability
 
-Macrel reports AMP_probability on a [-1, 1] scale (``2p - 1``), not the
-[0, 1] scale used everywhere else in PEGA. PEGA rescales it back to
-``[0, 1]`` via ``(raw + 1) / 2`` before returning it.
+``AMP_probability`` comes straight from the ONNX model's
+``output_probability`` and is already on the [0, 1] scale PEGA expects,
+so it is used as is.
+
+Index 4 is only ``AMP_probability`` because ``score`` passes
+``--keep-negatives``, which keeps the ``is_AMP`` column at index 3.
+Without that flag Macrel drops ``is_AMP`` and index 4 becomes the
+``Hemolytic`` label.
 
 Installation
 ------------
@@ -120,15 +125,11 @@ class MacrelPredictor(BasePredictor):
                 raise FileNotFoundError(f"Decompressed file not found: {result_file}")
 
             # skiprows=2 skips the comment line and column header
-            # Columns: 0=seq_name, 1=sequence, 2=AMP label, 3=hemolytic, 4=AMP_prob
+            # Columns: 0=seq_name, 1=sequence, 2=AMP_family, 3=is_AMP,
+            # 4=AMP_probability (index 4 relies on --keep-negatives above)
             raw = pd.read_csv(result_file, sep="\t", skiprows=2, header=None)
             scores = raw.iloc[:, [0, 4]].rename(columns={0: "seq_name", 4: "Macrel_score"})
             scores["Macrel_score"] = pd.to_numeric(scores["Macrel_score"], errors="coerce")
-
-            # Macrel reports AMP_probability on a [-1, 1] scale (2p - 1),
-            # not the [0, 1] probability scale every other PEGA predictor
-            # and the ensemble transforms in pega.ensemble expect. Rescale.
-            scores["Macrel_score"] = (scores["Macrel_score"] + 1) / 2
 
             return scores.dropna(subset=["Macrel_score"]).reset_index(drop=True)
 
