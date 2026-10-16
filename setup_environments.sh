@@ -2,13 +2,14 @@
 # =============================================================================
 # PEGA — Environment Setup Script
 # =============================================================================
-# Creates the three conda environments required by PEGA predictors.
+# Creates the four conda environments required by PEGA predictors.
 #
 # Usage:
 #   bash setup_environments.sh            # create all environments
 #   bash setup_environments.sh macrel     # create only macrel_env
 #   bash setup_environments.sh amplify    # create only amplify_env
 #   bash setup_environments.sh pega       # create only pega_env
+#   bash setup_environments.sh hemo       # create only hemo_env
 #   bash setup_environments.sh --status   # show environment status
 #
 # After running this script, activate the main environment and install PEGA:
@@ -49,7 +50,7 @@ show_status() {
     echo ""
     echo "PEGA environment status"
     echo "────────────────────────────────────────"
-    for name in pega_env macrel_env amplify_env; do
+    for name in pega_env macrel_env amplify_env hemo_env; do
         if env_exists "$name"; then
             ok "$name  [exists]"
         else
@@ -171,6 +172,32 @@ create_amplify_env() {
 }
 
 # ---------------------------------------------------------------------------
+# hemo_env
+# ---------------------------------------------------------------------------
+
+create_hemo_env() {
+    echo ""
+    echo "── hemo_env ──────────────────────────────"
+    if env_exists "hemo_env"; then
+        ok "hemo_env already exists — skipping."
+        return 0
+    fi
+    # HemoPI2 is kept out of pega_env on purpose: it pins
+    # scikit-learn==1.3.1, which forces numpy<2 and would downgrade
+    # pega_env's numpy 2.2, breaking its TensorFlow/PyTorch stack.
+    info "Creating hemo_env from envs/hemo_env.yml ..."
+    conda env create -f "${ENVS_DIR}/hemo_env.yml"
+    ok "hemo_env created."
+
+    # Quick smoke test
+    if conda run -n hemo_env hemopi2_classification -h &>/dev/null; then
+        ok "HemoPI2 is functional."
+    else
+        fail "HemoPI2 installed but 'hemopi2_classification -h' failed — check the environment."
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -194,13 +221,14 @@ TARGET="${1:-all}"
 
 case "$TARGET" in
     --status)   show_status ;;
-    all)        create_pega_env; create_macrel_env; create_amplify_env ;;
+    all)        create_pega_env; create_macrel_env; create_amplify_env; create_hemo_env ;;
     pega)       create_pega_env ;;
     macrel)     create_macrel_env ;;
     amplify)    create_amplify_env ;;
+    hemo)       create_hemo_env ;;
     *)
         echo "Unknown argument: $TARGET"
-        echo "Usage: bash setup_environments.sh [all|pega|macrel|amplify|--status]"
+        echo "Usage: bash setup_environments.sh [all|pega|macrel|amplify|hemo|--status]"
         exit 1
         ;;
 esac

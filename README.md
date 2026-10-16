@@ -48,6 +48,11 @@ saved automatically as TSV files. It supports datasets from a few sequences up t
 | 8 | AMPlify (imbalanced) | Attentive deep learning | `amplify_env` |
 | 9 | modlAMP RF | Random Forest (PepCATS) | `pega_env` |
 | 10 | modlAMP SVM | SVM (PepCATS) | `pega_env` |
+| 11 | HemoPI2 (RF) | Random Forest — **haemolysis**, not activity | `hemo_env` |
+
+Predictors 1–10 score antimicrobial activity. Predictor 11 scores a
+different endpoint — haemolytic toxicity — and is described under
+[Output](#hemolysis-columns).
 
 ## Validated Ensembles
 
@@ -209,6 +214,27 @@ mamba install bioconda::amplify
 conda deactivate
 ```
 
+**HemoPI2** (predictor 11, haemolysis):
+```bash
+conda env create -f envs/hemo_env.yml
+```
+
+> This needs its own environment and cannot go in `pega_env`. HemoPI2
+> pins `scikit-learn==1.3.1`, which forces `numpy<2`; installing it
+> alongside `pega_env`'s pinned `numpy=2.2` downgrades numpy and breaks
+> the TensorFlow/PyTorch stack built on it.
+>
+> Verify with a known haemolytic peptide — melittin should score high
+> and a polyanionic control low:
+> ```bash
+> printf '>melittin\nGIGAVLKVLTTGLPALISWIKRKRQQ\n>neg\nEEEEEEDDDDDDEEEEEEDDDDDD\n' > _hemo.fasta
+> conda run -n hemo_env hemopi2_classification -i _hemo.fasta -m 1 -j 1 -wd . -o _hemo.csv
+> cat _hemo.csv && rm -f _hemo.fasta _hemo.csv
+> ```
+> Expected: melittin ≈ 0.97 (`Hemolytic`), the negative ≈ 0.40
+> (`Non-Hemolytic`). If melittin comes out low, the environment has
+> drifted — recreate it from the pinned yml.
+
 ---
 
 ## Quick Start
@@ -271,19 +297,33 @@ df     = scores.merge(names, on="pep_id")
 ```
 
 All scores are probabilities in `[0, 1]`. Higher = more likely antimicrobial
-— with one exception.
+— except for the two haemolysis columns.
 
-### `hemolysis_macrel_score`
+<a id="hemolysis-columns"></a>
+### Hemolysis columns — higher is *worse*
 
-Macrel predicts two endpoints, and PEGA reports both. Alongside
-`Macrel_score` (antimicrobial probability) it emits
-`hemolysis_macrel_score`, Macrel's `Hemolytic_probability`.
+Two columns score haemolytic toxicity rather than antimicrobial activity:
+the probability that the peptide lyses red blood cells. They are triage
+flags, to help you drop promising-but-haemolytic candidates.
 
-**Higher is worse for this one**: it is the probability that the peptide
-lyses red blood cells, so it reads as a toxicity flag, not an activity
-score. No ensemble consumes it — it is reported for triage only, to help
-you drop promising-but-haemolytic candidates. It is dropped by
+| Column | Source | Notes |
+|--------|--------|-------|
+| `hemolysis_macrel_score` | Macrel's `Hemolytic_probability` | Free — Macrel already runs for `Macrel_score` |
+| `hemopi2_score` | HemoPI2 Random Forest (`hemo_env`) | AUC 0.888 on the authors' independent set |
+
+**Neither is consumed by any ensemble**, and both are dropped by
 `--no-individual-scores`, which keeps only `ensemble_*` columns.
+
+Two caveats on `hemopi2_score`: HemoPI2 truncates sequences longer than
+40 residues to their first 40 before scoring, and its own
+hemolytic/non-hemolytic cutoff is 0.46, not 0.5.
+
+Why these two and not the others: of the published haemolysis predictors,
+most are web servers with no installable code (HemoPred, HAPPENN,
+HLPpred-Fuse), and several have code or services that no longer run —
+the HemoPI2 authors report being unable to evaluate HLPpred-Fuse,
+HemoNet, hemolytic-Pred or Capecchi's RNN for exactly that reason. A web
+server is also unusable here: no batching, no offline reproducibility.
 
 ---
 

@@ -1,0 +1,32 @@
+name: hemo_env
+channels:
+  # conda-forge before bioconda, and nodefaults, for the same reason as
+  # macrel_env.yml — see the comment there.
+  - conda-forge
+  - nodefaults
+
+# HemoPI2 haemolysis predictor.
+#
+# This cannot live in pega_env. HemoPI2 pins scikit-learn==1.3.1, which
+# forces numpy<2:
+#
+#   Attempting uninstall: numpy
+#     Uninstalling numpy-2.2.6
+#   Successfully installed numpy-1.26.4 scikit-learn-1.3.1
+#
+# pega_env pins numpy=2.2 with TensorFlow 2.19, PyTorch 2.10 and Keras
+# 3.12 built on top of it, so installing HemoPI2 there would silently
+# downgrade numpy and break that stack.
+
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      # Pinned: the RF model is a pickle, and loading it under a different
+      # scikit-learn than it was fitted with can change scores silently.
+      # hemopi2 pins scikit-learn==1.3.1 itself and bundles its models.
+      - hemopi2==1.3
+      # hemopi2 imports torch at module scope but omits it from its
+      # dependency metadata, so pip will not pull it in on its own.
+      # Left unpinned: the RF path never calls torch, it only imports it.
+      - torch
