@@ -270,7 +270,20 @@ scores = pd.read_csv("PEGA_screen_*/scores.tsv", sep="\t")
 df     = scores.merge(names, on="pep_id")
 ```
 
-All scores are probabilities in `[0, 1]`. Higher = more likely antimicrobial.
+All scores are probabilities in `[0, 1]`. Higher = more likely antimicrobial
+— with one exception.
+
+### `hemolysis_macrel_score`
+
+Macrel predicts two endpoints, and PEGA reports both. Alongside
+`Macrel_score` (antimicrobial probability) it emits
+`hemolysis_macrel_score`, Macrel's `Hemolytic_probability`.
+
+**Higher is worse for this one**: it is the probability that the peptide
+lyses red blood cells, so it reads as a toxicity flag, not an activity
+score. No ensemble consumes it — it is reported for triage only, to help
+you drop promising-but-haemolytic candidates. It is dropped by
+`--no-individual-scores`, which keeps only `ensemble_*` columns.
 
 ---
 

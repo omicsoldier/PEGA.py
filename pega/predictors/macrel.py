@@ -14,18 +14,22 @@ Output columns (0-indexed, after skiprows=2)
 1  sequence
 2  AMP_family
 3  is_AMP label
-4  AMP_probability  ← used by PEGA
+4  AMP_probability  ← used by PEGA, as ``Macrel_score``
 5  Hemolytic label
-6  Hemolytic_probability
+6  Hemolytic_probability  ← used by PEGA, as ``hemolysis_macrel_score``
 
-``AMP_probability`` comes straight from the ONNX model's
-``output_probability`` and is already on the [0, 1] scale PEGA expects,
-so it is used as is.
+Both probabilities come straight from the ONNX models'
+``output_probability`` and are already on the [0, 1] scale PEGA expects,
+so they are used as is.
 
-Index 4 is only ``AMP_probability`` because ``score`` passes
+``hemolysis_macrel_score`` is reported alongside the AMP score but is a
+separate endpoint: it predicts haemolytic activity, not antimicrobial
+activity, and no ensemble consumes it.
+
+Indices 4 and 6 hold these two columns only because ``score`` passes
 ``--keep-negatives``, which keeps the ``is_AMP`` column at index 3.
-Without that flag Macrel drops ``is_AMP`` and index 4 becomes the
-``Hemolytic`` label.
+Without that flag Macrel drops ``is_AMP`` and every index past 3 shifts
+down by one.
 
 Installation
 ------------
@@ -126,11 +130,20 @@ class MacrelPredictor(BasePredictor):
 
             # skiprows=2 skips the comment line and column header
             # Columns: 0=seq_name, 1=sequence, 2=AMP_family, 3=is_AMP,
-            # 4=AMP_probability (index 4 relies on --keep-negatives above)
+            # 4=AMP_probability, 5=Hemolytic, 6=Hemolytic_probability
+            # (indices 4 and 6 rely on --keep-negatives above)
             raw = pd.read_csv(result_file, sep="\t", skiprows=2, header=None)
-            scores = raw.iloc[:, [0, 4]].rename(columns={0: "seq_name", 4: "Macrel_score"})
-            scores["Macrel_score"] = pd.to_numeric(scores["Macrel_score"], errors="coerce")
+            scores = raw.iloc[:, [0, 4, 6]].rename(columns={
+                0: "seq_name",
+                4: "Macrel_score",
+                6: "hemolysis_macrel_score",
+            })
+            for col in ("Macrel_score", "hemolysis_macrel_score"):
+                scores[col] = pd.to_numeric(scores[col], errors="coerce")
 
+            # Only the AMP score decides whether a row is usable; a row with
+            # a valid AMP score but an unparsable hemolysis value keeps the
+            # former and carries NaN for the latter.
             return scores.dropna(subset=["Macrel_score"]).reset_index(drop=True)
 
         except subprocess.CalledProcessError as exc:
