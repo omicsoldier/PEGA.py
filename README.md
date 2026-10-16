@@ -275,7 +275,7 @@ PEGA screen --fasta large.fasta \
 PEGA_results_YYYYMMDD_HHMMSS.tsv
 ```
 
-Columns: `seq_name` | `original_header` | scores | ensemble scores
+Columns: `seq_name` | `original_header` | activity scores | ensemble scores | hemolysis scores
 
 ### `PEGA screen` → folder with 3 files
 
@@ -284,7 +284,7 @@ PEGA_screen_YYYYMMDD_HHMMSS/
 ├── names.tsv       # pep_id | original_header | length
 ├── rejected.tsv    # original_header | length | reason
 ├── rejected.fasta  # FASTA of rejected sequences
-└── scores.tsv      # pep_id | scores | ensemble scores
+└── scores.tsv      # pep_id | activity scores | ensemble scores | hemolysis scores
 ```
 
 Join scores ↔ names on `pep_id`:
@@ -312,7 +312,9 @@ flags, to help you drop promising-but-haemolytic candidates.
 | `hemopi2_score` | HemoPI2 Random Forest (`hemo_env`) | AUC 0.888 on the authors' independent set |
 
 **Neither is consumed by any ensemble**, and both are dropped by
-`--no-individual-scores`, which keeps only `ensemble_*` columns.
+`--no-individual-scores`, which keeps only `ensemble_*` columns. They are
+placed at the end of the table, after the ensembles, so the activity
+columns read as one block.
 
 Two caveats on `hemopi2_score`: HemoPI2 truncates sequences longer than
 40 residues to their first 40 before scoring, and its own

@@ -22,6 +22,11 @@ from pega.registry import registry
 _CANONICAL_SET = set("ACDEFGHIKLMNPQRSTVWY")
 _console = Console()
 
+# Score columns that measure haemolytic toxicity rather than antimicrobial
+# activity. They are moved to the end of the output so the activity scores
+# and ensembles read as one block. Add new haemolysis columns here.
+_HEMOLYSIS_COLUMNS = ("hemolysis_macrel_score", "hemopi2_score")
+
 
 # ---------------------------------------------------------------------------
 # FASTA helpers
@@ -534,6 +539,13 @@ def calculate_scores(
         valid_ens = [n for n in ensemble_names if n in ENSEMBLES]
         if valid_ens:
             merged = compute_ensembles(merged, ensemble_names=valid_ens)
+
+    # ── Hemolysis columns last ────────────────────────────────────────
+    hemo_cols = [c for c in _HEMOLYSIS_COLUMNS if c in merged.columns]
+    if hemo_cols:
+        merged = merged[
+            [c for c in merged.columns if c not in hemo_cols] + hemo_cols
+        ]
 
     # ── Drop individual scores if requested ───────────────────────────
     if no_individual_scores:
