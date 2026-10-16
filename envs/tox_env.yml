@@ -5,7 +5,11 @@ channels:
   - conda-forge
   - nodefaults
 
-# ToxinPred3 toxicity predictor.
+# ToxinPred3 (toxicity) and AlgPred 2.0 (allergenicity).
+#
+# Both are Raghava-group packages with the same pickle pins, so they
+# share one environment; verified that installing both leaves
+# ToxinPred3's scores unchanged.
 #
 # This needs an environment of its own — it can share neither pega_env
 # nor hemo_env. ToxinPred3's ExtraTrees models are pickles fitted under
@@ -24,6 +28,7 @@ dependencies:
   - pip
   - pip:
       - toxinpred3==1.4
+      - algpred2==1.4
       # Not a precaution — this pin is what makes the package work.
       - scikit-learn==1.0.2
       # scikit-learn 1.0.2's compiled extensions break against newer

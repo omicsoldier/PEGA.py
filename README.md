@@ -51,8 +51,9 @@ saved automatically as TSV files. It supports datasets from a few sequences up t
 | 11 | HemoPI2 (RF) | Random Forest — **haemolysis**, not activity | `hemo_env` |
 | 12 | ToxinPred3 (ET) | Extra Trees — **toxicity**, not activity | `tox_env` |
 | 13 | ToxiPep | BiGRU/Transformer + atomic graph — **toxicity** | `toxipep_env` + checkout |
+| 14 | AlgPred2 | **Allergenicity**, not activity | `tox_env` |
 
-Predictors 1–10 score antimicrobial activity. Predictors 11–13 score
+Predictors 1–10 score antimicrobial activity. Predictors 11–14 score
 different endpoints — liabilities rather than activity — and are
 described under [Output](#liability-columns).
 
@@ -321,15 +322,19 @@ PEGA screen --fasta large.fasta \
 ### `PEGA score` → single TSV
 
 ```
-PEGA_results_YYYYMMDD_HHMMSS.tsv
+results_PEGA/PEGA_results_YYYYMMDD_HHMMSS.tsv
 ```
 
 Columns: `seq_name` | `original_header` | activity scores | ensemble scores | liability scores
 
+Written to `results_PEGA/` unless `--out` names another path. An explicit
+`--out` is used exactly as given, and its parent directories are created
+if missing.
+
 ### `PEGA screen` → folder with 3 files
 
 ```
-PEGA_screen_YYYYMMDD_HHMMSS/
+results_PEGA/PEGA_screen_YYYYMMDD_HHMMSS/
 ├── names.tsv       # pep_id | original_header | length
 ├── rejected.tsv    # original_header | length | reason
 ├── rejected.fasta  # FASTA of rejected sequences
@@ -360,6 +365,7 @@ triage flags, to help you drop promising-but-risky candidates.
 | `hemopi2_score` | Lyses red blood cells | HemoPI2 Random Forest (`hemo_env`), AUC 0.888 |
 | `toxinpred3_score` | Is a toxin | ToxinPred3 Extra Trees (`tox_env`) |
 | `toxipep_score` | Is a toxin | ToxiPep (`toxipep_env` + your own checkout) |
+| `algpred2_score` | Provokes an allergic response | AlgPred 2.0 (`tox_env`, shared with ToxinPred3) |
 
 **None is consumed by any ensemble**, and all are dropped by
 `--no-individual-scores`, which keeps only `ensemble_*` columns. They sit
@@ -375,6 +381,11 @@ on HemoPI2 but 1.00 on ToxinPred3; melittin, actual bee venom, scores
 0.97 and 0.82. A high `toxinpred3_score` on a designed AMP is common and
 is not on its own a safety finding — many membrane-active AMPs sit in
 ToxinPred's positive set. Read the columns together, not as substitutes.
+
+`algpred2_score` needs reading with care: AlgPred 2.0 was trained on
+allergenic *proteins*, and on a 25-peptide panel its scores spanned only
+0.27–0.43, a narrow band around its own 0.3 cutoff. Treat it as a flag to
+follow up, not a verdict.
 
 Caveats on `hemopi2_score`: HemoPI2 truncates sequences longer than 40
 residues to their first 40 before scoring, and its own cutoff is 0.46,

@@ -25,11 +25,16 @@ _console = Console()
 # antimicrobial activity, so higher is worse. They are moved to the end of
 # the output so the activity scores and ensembles read as one block. Add
 # new haemolysis or toxicity columns here.
+# Default parent folder for results. Only used when the caller does not
+# name an output path of its own.
+_DEFAULT_RESULTS_DIR = "results_PEGA"
+
 _LIABILITY_COLUMNS = (
     "hemolysis_macrel_score",
     "hemopi2_score",
     "toxinpred3_score",
     "toxipep_score",
+    "algpred2_score",
 )
 
 
@@ -209,7 +214,7 @@ def screen_sequences(
     # ── Output folder ──────────────────────────────────────────────────
     if output_dir is None:
         timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path(f"PEGA_screen_{timestamp}")
+        output_dir = Path(_DEFAULT_RESULTS_DIR) / f"PEGA_screen_{timestamp}"
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -402,7 +407,7 @@ def calculate_scores(
               f"(len: {stats['min_len']}–{stats['max_len']}, avg {stats['avg_len']})")
         print(f"  Predictors : {predictor_label}")
         print(f"  Jobs       : {jobs}")
-        out_label = export_tsv if export_tsv else "PEGA_results_<timestamp>.tsv"
+        out_label = export_tsv or f"{_DEFAULT_RESULTS_DIR}/PEGA_results_<timestamp>.tsv"
         print(f"  Output     : {out_label}")
         ok, status_msg = validate_fasta(fasta_path, verbose=False)
         print(f"  Status     : {status_msg}")
@@ -578,8 +583,13 @@ def calculate_scores(
     if not _no_export:
         if export_tsv is None:
             timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
-            export_tsv = f"PEGA_results_{timestamp}.tsv"
+            export_tsv = (
+                Path(_DEFAULT_RESULTS_DIR) / f"PEGA_results_{timestamp}.tsv"
+            )
         out_path = Path(export_tsv)
+        # Also covers an explicit --out into a directory that does not
+        # exist yet, which used to fail at write time.
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         merged.to_csv(out_path, sep="\t", index=False)
         # Break the column count down by kind — a bare total hides that
         # some of these columns score the opposite of what the rest do.

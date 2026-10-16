@@ -218,10 +218,10 @@ create_tox_env() {
     ok "tox_env created."
 
     # Quick smoke test
-    if conda run -n tox_env toxinpred3 -h &>/dev/null; then
-        ok "ToxinPred3 is functional."
+    if conda run -n tox_env toxinpred3 -h &>/dev/null && conda run -n tox_env algpred2 -h &>/dev/null; then
+        ok "ToxinPred3 and AlgPred2 are functional."
     else
-        fail "ToxinPred3 installed but 'toxinpred3 -h' failed — check the environment."
+        fail "tox_env created but toxinpred3 or algpred2 failed — check the environment."
     fi
 }
 

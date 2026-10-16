@@ -340,7 +340,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--predictors", "-p", nargs="+", metavar="NAME",
                     help="Predictor names (run 'PEGA list' for names). Default: all.")
     sp.add_argument("--out", "-o", metavar="FILE",
-                    help="Output TSV file path. Default: PEGA_results_<timestamp>.tsv")
+                    help="Output TSV file path. Default: results_PEGA/PEGA_results_<timestamp>.tsv")
     sp.add_argument("--jobs", "-j", type=int, default=1, metavar="N",
                     help="Parallel workers. Use -1 for 75%% of available CPU threads. Default: 1 (sequential).")
     sp.add_argument("--ensembles", "-e", nargs="+", metavar="NAME",
