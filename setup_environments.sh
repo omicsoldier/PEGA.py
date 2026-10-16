@@ -2,7 +2,7 @@
 # =============================================================================
 # PEGA — Environment Setup Script
 # =============================================================================
-# Creates the five conda environments required by PEGA predictors.
+# Creates the six conda environments required by PEGA predictors.
 #
 # Usage:
 #   bash setup_environments.sh            # create all environments
@@ -11,6 +11,7 @@
 #   bash setup_environments.sh pega       # create only pega_env
 #   bash setup_environments.sh hemo       # create only hemo_env
 #   bash setup_environments.sh tox        # create only tox_env
+#   bash setup_environments.sh toxipep    # create only toxipep_env
 #   bash setup_environments.sh --status   # show environment status
 #
 # After running this script, activate the main environment and install PEGA:
@@ -51,7 +52,7 @@ show_status() {
     echo ""
     echo "PEGA environment status"
     echo "────────────────────────────────────────"
-    for name in pega_env macrel_env amplify_env hemo_env tox_env; do
+    for name in pega_env macrel_env amplify_env hemo_env tox_env toxipep_env; do
         if env_exists "$name"; then
             ok "$name  [exists]"
         else
@@ -225,6 +226,29 @@ create_tox_env() {
 }
 
 # ---------------------------------------------------------------------------
+# toxipep_env
+# ---------------------------------------------------------------------------
+
+create_toxipep_env() {
+    echo ""
+    echo "── toxipep_env ───────────────────────────"
+    if env_exists "toxipep_env"; then
+        ok "toxipep_env already exists — skipping."
+        return 0
+    fi
+    info "Creating toxipep_env from envs/toxipep_env.yml ..."
+    conda env create -f "${ENVS_DIR}/toxipep_env.yml"
+    ok "toxipep_env created."
+
+    # ToxiPep itself is not installed here: its repo has no licence file,
+    # so PEGA calls a clone you provide instead of redistributing it.
+    echo ""
+    info "ToxiPep code is NOT installed by this script. To enable it:"
+    echo "       git clone https://github.com/GGCL7/ToxiPep"
+    echo "       export PEGA_TOXIPEP_DIR=/path/to/ToxiPep/Code"
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -248,15 +272,16 @@ TARGET="${1:-all}"
 
 case "$TARGET" in
     --status)   show_status ;;
-    all)        create_pega_env; create_macrel_env; create_amplify_env; create_hemo_env; create_tox_env ;;
+    all)        create_pega_env; create_macrel_env; create_amplify_env; create_hemo_env; create_tox_env; create_toxipep_env ;;
     pega)       create_pega_env ;;
     macrel)     create_macrel_env ;;
     amplify)    create_amplify_env ;;
     hemo)       create_hemo_env ;;
     tox)        create_tox_env ;;
+    toxipep)    create_toxipep_env ;;
     *)
         echo "Unknown argument: $TARGET"
-        echo "Usage: bash setup_environments.sh [all|pega|macrel|amplify|hemo|tox|--status]"
+        echo "Usage: bash setup_environments.sh [all|pega|macrel|amplify|hemo|tox|toxipep|--status]"
         exit 1
         ;;
 esac

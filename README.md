@@ -50,8 +50,9 @@ saved automatically as TSV files. It supports datasets from a few sequences up t
 | 10 | modlAMP SVM | SVM (PepCATS) | `pega_env` |
 | 11 | HemoPI2 (RF) | Random Forest — **haemolysis**, not activity | `hemo_env` |
 | 12 | ToxinPred3 (ET) | Extra Trees — **toxicity**, not activity | `tox_env` |
+| 13 | ToxiPep | BiGRU/Transformer + atomic graph — **toxicity** | `toxipep_env` + checkout |
 
-Predictors 1–10 score antimicrobial activity. Predictors 11 and 12 score
+Predictors 1–10 score antimicrobial activity. Predictors 11–13 score
 different endpoints — liabilities rather than activity — and are
 described under [Output](#liability-columns).
 
@@ -258,6 +259,31 @@ conda env create -f envs/tox_env.yml
 > defaults to `-m 2`, the MERCI hybrid, which scores melittin 0.32 and
 > calls bee venom non-toxic.
 
+**ToxiPep** (predictor 13, toxicity) — optional:
+```bash
+conda env create -f envs/toxipep_env.yml
+git clone https://github.com/GGCL7/ToxiPep
+export PEGA_TOXIPEP_DIR=/path/to/ToxiPep/Code
+```
+
+> ToxiPep is **not bundled with PEGA**. Its repository carries no licence
+> file, so by default all rights are reserved and redistributing its code
+> or weights here would be unlicensed — you clone it yourself and PEGA
+> calls your copy. Without `PEGA_TOXIPEP_DIR` the predictor reports
+> itself unavailable and the rest of PEGA runs normally.
+>
+> PEGA does not modify the checkout. Two upstream quirks are handled at
+> call time: `predict.py` loads CUDA-saved weights with no
+> `map_location`, so PEGA runs it through a wrapper that defaults to CPU;
+> and its third output column is the model's confidence in whichever
+> class it picked, not P(toxic), so PEGA inverts it using the label
+> column. Read that file directly and non-toxic peptides look like the
+> most toxic ones — LL-37 writes 0.990 for a *non-toxic* call.
+>
+> `envs/toxipep_env.yml` also departs from ToxiPep's `requirements.txt`,
+> which pins `torch_geometric`, `torch_sparse`, `torch-scatter`,
+> `selenium` and `shap`. None are imported by the prediction path.
+
 ---
 
 ## Quick Start
@@ -333,6 +359,7 @@ triage flags, to help you drop promising-but-risky candidates.
 | `hemolysis_macrel_score` | Lyses red blood cells | Macrel's `Hemolytic_probability` — free, Macrel already runs |
 | `hemopi2_score` | Lyses red blood cells | HemoPI2 Random Forest (`hemo_env`), AUC 0.888 |
 | `toxinpred3_score` | Is a toxin | ToxinPred3 Extra Trees (`tox_env`) |
+| `toxipep_score` | Is a toxin | ToxiPep (`toxipep_env` + your own checkout) |
 
 **None is consumed by any ensemble**, and all are dropped by
 `--no-individual-scores`, which keeps only `ensemble_*` columns. They sit
@@ -351,7 +378,15 @@ ToxinPred's positive set. Read the columns together, not as substitutes.
 
 Caveats on `hemopi2_score`: HemoPI2 truncates sequences longer than 40
 residues to their first 40 before scoring, and its own cutoff is 0.46,
-not 0.5. ToxinPred3's cutoff is 0.38.
+not 0.5. ToxinPred3's cutoff is 0.38. ToxiPep rejects sequences longer
+than 50 residues outright rather than truncating.
+
+On a 25-peptide control panel — six known toxins (melittin, mastoparan,
+protegrin-1, polyphemusin-1, apamin, conotoxin GI) against realistic
+inert peptides — ToxiPep separated the two groups completely (toxins all
+above 0.75, inert all below 0.38). Both it and HemoPI2's ESM2 model do,
+however, score low-complexity homopolymers as toxic/haemolytic, which is
+worth knowing when evolving sequences with a GA.
 
 Why these and not the others: most published haemolysis and toxicity
 predictors are web servers with no installable code (HemoPred, HAPPENN,

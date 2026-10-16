@@ -30,6 +30,7 @@ _LIABILITY_COLUMNS = (
     "hemolysis_macrel_score",
     "hemopi2_score",
     "toxinpred3_score",
+    "toxipep_score",
 )
 
 
