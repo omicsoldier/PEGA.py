@@ -143,17 +143,25 @@ def cmd_list(args: argparse.Namespace) -> int:
         table.add_column("Name", style="bold cyan")
         table.add_column("Method")
         table.add_column("Pred", justify="right")
-        table.add_column("MCC", justify="right")
-        table.add_column("AUC", justify="right")
+        table.add_column("Performance", justify="right")
+        table.add_column("Deploy")
         table.add_column("Description")
         for e in list_ensembles():
+            m = e["metrics"]
+            if e["objective"] == "screening":
+                perf = f"BEDROC {m['bedroc']:.3f}"
+            else:
+                perf = f"MCC {m['mcc_nested_cv']:.3f}"
             table.add_row(
-                e["name"], e["method"], str(e["n_predictors"]),
-                f"{e['metrics']['mcc']:.3f}", f"{e['metrics']['auc']:.3f}",
+                e["name"], e["method"], str(e["n_predictors"]), perf,
+                "yes" if e["deploy"] else "[bold red]no[/bold red]",
                 e["description"][:40],
             )
         console.print(table)
         console.print(f"\n  [bold]{len(ENSEMBLES)}[/bold] ensembles available.")
+        for e in list_ensembles():
+            if e["deploy_note"]:
+                console.print(f"  [dim]{e['name']}: {e['deploy_note']}[/dim]")
     else:
         from pega.registry import registry
         table = Table(box=SIMPLE_HEAVY, show_edge=False)
@@ -308,8 +316,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "  PEGA score --fasta sequences.fasta --predictors AMPnet modlAMP_RF\n"
             "  PEGA score --fasta sequences.fasta --out results.tsv --jobs 4\n"
             "  PEGA score --fasta sequences.fasta --quiet\n"
-            "  PEGA score --fasta sequences.fasta --ensembles AMP\n"
-            "  PEGA score --fasta sequences.fasta --ensembles AMP AVP AFP ABP --no-individual-scores\n"
+            "  PEGA score --fasta sequences.fasta --ensembles AMP_class\n"
+            "  PEGA score --fasta sequences.fasta --ensembles AMP_screen ABP_screen --no-individual-scores\n"
             "  PEGA setup --status\n"
             "  PEGA download-models\n"
         ),
@@ -336,7 +344,8 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--jobs", "-j", type=int, default=1, metavar="N",
                     help="Parallel workers. Use -1 for 75%% of available CPU threads. Default: 1 (sequential).")
     sp.add_argument("--ensembles", "-e", nargs="+", metavar="NAME",
-                    help="Only compute specific ensembles (AMP AVP AFP ABP). "
+                    help="Only compute specific ensembles, e.g. AMP_class ABP_screen "
+                         "(activity AMP/AVP/AFP/APP/ABP + _class or _screen). "
                          "Pass 'none' to skip all ensembles. Default: all.")
     sp.add_argument("--no-individual-scores", action="store_true", default=False,
                     help="Output only ensemble columns.")
@@ -361,7 +370,8 @@ def _build_parser() -> argparse.ArgumentParser:
                       help="Sequences per chunk (default: 50,000). Reduce to 10,000 if RAM < 16 GB. "
                            "Increase to 50,000 if you have ≥32 GB RAM.")
     scrp.add_argument("--ensembles", "-e", nargs="+", metavar="NAME",
-                      help="Only compute specific ensembles (AMP AVP AFP ABP). "
+                      help="Only compute specific ensembles, e.g. AMP_screen ABP_screen "
+                           "(activity AMP/AVP/AFP/APP/ABP + _class or _screen). "
                            "Auto-selects required predictors.")
     scrp.add_argument("--no-individual-scores", action="store_true", default=False,
                       help="Output only ensemble columns.")

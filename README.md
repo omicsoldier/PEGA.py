@@ -51,12 +51,40 @@ saved automatically as TSV files. It supports datasets from a few sequences up t
 
 ## Validated Ensembles
 
-| Ensemble | Predictors | Task | MCC | AUC |
-|----------|-----------|------|-----|-----|
-| `ensemble_AMP_score` | AMP_CG, ampir, AMPlify, AMPnet, modlAMP RF | Antimicrobial | 0.767 | 0.932 |
-| `ensemble_AVP_score` | AMP_CG, ampir, modlAMP SVM | Antiviral | 0.456 | 0.785 |
-| `ensemble_AFP_score` | AMP_CG, AMPnet, Macrel | Antifungal | 0.757 | 0.929 |
-| `ensemble_ABP_score` | AMP_CG, ampir, AMPlify, AMPnet, Macrel, modlAMP RF | Antibiofilm | 0.875 | 0.975 |
+Every activity has two ensembles. Use `_class` to label peptides at a 0.5
+threshold, and `_screen` to rank candidates for virtual screening — they
+were optimised for different objectives (MCC vs. BEDROC) and generally
+select different predictors and transformations.
+
+**Classification (MCC-optimised).** MCC below is the nested-CV value, i.e.
+out-of-fold, not the in-sample figure.
+
+| Ensemble | Predictors | Task | Strategy | MCC | AUC |
+|----------|-----------|------|----------|-----|-----|
+| `ensemble_AMP_class_score` | AMPnet, Macrel, AMPlify | Antimicrobial | mean | 0.839 | 0.962 |
+| `ensemble_AVP_class_score` | AMP_CG, AMPlify, modlAMP RF | Antiviral | weighted mean | 0.412 | 0.765 |
+| `ensemble_AFP_class_score` | Macrel, AMP_CG, ampir, modlAMP RF | Antifungal | vote | 0.700 | 0.881 |
+| `ensemble_APP_class_score` | Macrel, AMPnet | Antiparasitic | weighted mean | 0.623 | 0.867 |
+| `ensemble_ABP_class_score` | ampir, AMP_CG, AMPnet, modlAMP RF | Antibacterial | weighted mean | 0.854 | 0.967 |
+
+**Screening (BEDROC-optimised).**
+
+| Ensemble | Predictors | Task | Strategy | BEDROC | AUPRC |
+|----------|-----------|------|----------|--------|-------|
+| `ensemble_AMP_screen_score` | AMPnet, Macrel, AMPlify ×2 | Antimicrobial | weighted mean | 0.891 | 0.844 |
+| `ensemble_AVP_screen_score` | AMP_CG, ampir, modlAMP SVM | Antiviral | weighted mean | 0.412 | 0.271 |
+| `ensemble_AFP_screen_score` | Macrel, AMP_CG, AMPnet, ampir | Antifungal | median | 0.809 | 0.751 |
+| `ensemble_APP_screen_score` | Macrel, AMPnet, modlAMP SVM, ampir | Antiparasitic | median | 0.621 | 0.533 |
+| `ensemble_ABP_screen_score` | AMP_CG, ampir, AMPlify, AMPnet, Macrel | Antibacterial | weighted mean | 0.890 | 0.836 |
+
+> **Do not deploy the antiviral ensembles.** Neither beats the single
+> `AMP_CG_score` predictor out of fold (classification delta MCC = −0.015;
+> screening ties it at 0.412 vs 0.406). Use `AMP_CG_score` alone for AVP.
+> `PEGA list --ensembles` prints this and the other caveats.
+>
+> `ensemble_AFP_class_score` uses a **vote**, so it only takes 5 distinct
+> values (0, 0.25, 0.5, 0.75, 1). It labels well but cannot rank — use
+> `ensemble_AFP_screen_score` for screening.
 
 ---
 
@@ -199,14 +227,14 @@ PEGA score --fasta sequences.fasta --jobs -1 --quiet
 
 # Score — ensemble columns only (faster)
 PEGA score --fasta sequences.fasta \
-    --ensembles AMP AVP AFP ABP \
+    --ensembles AMP_class AFP_class APP_class ABP_class \
     --no-individual-scores \
     --jobs -1 --quiet
 
 # Large dataset screening
 PEGA screen --fasta large.fasta \
     --chunk 50000 \
-    --ensembles AMP AVP AFP ABP \
+    --ensembles AMP_screen AFP_screen APP_screen ABP_screen \
     --no-individual-scores \
     --quiet
 ```
