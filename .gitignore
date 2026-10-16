@@ -41,3 +41,18 @@ PEGA_results_*.tsv
 pega/test.fasta
 PEGA_screen_*/
 pega/test1.fasta
+
+# PEGA output
+results_PEGA/
+
+# Scratch left behind by third-party predictors when they are run by hand
+# from the repository root. PEGA itself runs them in a temp directory, so
+# these only appear from manual invocations.
+Sequence_1
+seq.aac
+seq.pred
+merci.txt
+merci_output.csv
+merci_hybrid.csv
+blast_hybrid.csv
+RES_*.out

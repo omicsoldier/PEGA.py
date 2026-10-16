@@ -329,11 +329,8 @@ results_PEGA/PEGA_results_YYYYMMDD_HHMMSS.tsv
 Columns: `seq_name` | `original_header` | activity scores | ensemble scores | liability scores
 
 Written to `results_PEGA/` unless `--out` names another path. Scores are
-rounded to 4 decimals in the file; the DataFrame returned by the Python
-API keeps full precision. After each run PEGA prints a legend naming
-which columns are activity, which are ensembles, and which are
-liabilities — a bare TSV header does not say that the groups point in
-opposite directions. An explicit
+rounded to 5 decimals in the file; the DataFrame returned by the Python
+API keeps full precision. An explicit
 `--out` is used exactly as given, and its parent directories are created
 if missing.
 

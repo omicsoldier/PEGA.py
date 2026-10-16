@@ -52,35 +52,6 @@ _LIABILITY_COLUMNS = tuple(
 )
 
 
-def _column_groups(df: pd.DataFrame) -> list[tuple[str, list[str]]]:
-    """Group the output columns by what they measure, in file order."""
-    ids = [c for c in ("seq_name", "original_header") if c in df.columns]
-    ens = [c for c in df.columns if c.startswith("ensemble_")]
-    activity = [
-        c for c in df.columns
-        if c not in ids and c not in ens and c not in _LIABILITY_COLUMNS
-    ]
-    groups = [("identifiers", ids), ("activity", activity), ("ensembles", ens)]
-    for label, cols in _LIABILITY_GROUPS.items():
-        present = [c for c in cols if c in df.columns]
-        if present:
-            groups.append((label, present))
-    return [(label, cols) for label, cols in groups if cols]
-
-
-def _print_column_legend(df: pd.DataFrame) -> None:
-    """Print which output columns belong to which group."""
-    groups = _column_groups(df)
-    width = max(len(label) for label, _ in groups)
-    _console.print()
-    for label, cols in groups:
-        arrow = " [dim](higher = worse)[/dim]" if any(
-            c in _LIABILITY_COLUMNS for c in cols
-        ) else ""
-        _console.print(f"  [bold]{label:<{width}}[/bold]  {len(cols)}{arrow}")
-        _console.print(f"  {'':<{width}}  [dim]{', '.join(cols)}[/dim]")
-
-
 # ---------------------------------------------------------------------------
 # FASTA helpers
 # ---------------------------------------------------------------------------
@@ -556,19 +527,27 @@ def calculate_scores(
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {executor.submit(_run, cls): cls
                            for cls in predictor_classes}
+                # Collected rather than printed as each finishes, so the
+                # listing comes out in predictor order instead of fastest
+                # first — matching the sequential path, which follows
+                # predictor_classes (already sorted by predictor_id).
+                finished: dict[str, tuple[str, float | None]] = {}
                 for future in as_completed(futures):
                     cls = futures[future]
                     completed += 1
                     try:
                         name, df, elapsed = future.result()
                         dfs[name] = df
-                        _progress(completed, total,
-                                  f"{cls.display_name} ✓", elapsed)
+                        finished[cls.name] = (f"{cls.display_name} ✓", elapsed)
                     except Exception as exc:
                         errors[cls.display_name] = str(exc)
-                        _progress(completed, total,
-                                  f"{cls.display_name} ✗")
+                        finished[cls.name] = (f"{cls.display_name} ✗", None)
                         print(f"       failed: {exc}", file=sys.stderr)
+
+                for i, cls in enumerate(predictor_classes, 1):
+                    if cls.name in finished:
+                        label, elapsed = finished[cls.name]
+                        _progress(i, total, label, elapsed)
         finally:
             _tqdm_module.tqdm.__init__ = _orig_init
 
@@ -633,10 +612,10 @@ def calculate_scores(
         # Also covers an explicit --out into a directory that does not
         # exist yet, which used to fail at write time.
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        # Rounded only on the way out: predictors report 3-4 significant
+        # Rounded only on the way out: predictors report 3-5 significant
         # digits, so full float repr is noise in a file meant to be read.
         # The returned DataFrame keeps full precision.
-        merged.round(4).to_csv(out_path, sep="\t", index=False)
+        merged.round(5).to_csv(out_path, sep="\t", index=False)
         _console.print(
             f"\n  [bold green]Saved[/bold green] → [bold]{out_path}[/bold]"
         )
@@ -644,12 +623,6 @@ def calculate_scores(
             f"  [dim]{len(merged)} sequences · "
             f"{len(merged.columns)} columns[/dim]"
         )
-        if not quiet:
-            # Name the groups. The columns are ordered this way in the file,
-            # but nothing in a bare TSV header says which score measures
-            # activity and which measures a liability — and they point in
-            # opposite directions.
-            _print_column_legend(merged)
 
     # ── Cleanup ───────────────────────────────────────────────────────
     if _tmp_fasta is not None and _tmp_fasta.exists():
