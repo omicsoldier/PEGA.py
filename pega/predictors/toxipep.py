@@ -103,9 +103,8 @@ class ToxiPepPredictor(BasePredictor):
 
     @classmethod
     @functools.lru_cache(maxsize=None)
-    def is_available(cls) -> bool:
-        if _toxipep_dir() is None:
-            return False
+    def _env_ready(cls) -> bool:
+        """Whether toxipep_env exists and imports. Cached: spawns conda."""
         if not cls._executable_on_path("conda"):
             return False
         result = subprocess.run(
@@ -113,6 +112,13 @@ class ToxiPepPredictor(BasePredictor):
             capture_output=True,
         )
         return result.returncode == 0
+
+    @classmethod
+    def is_available(cls) -> bool:
+        # The checkout lookup stays uncached: unlike a conda environment,
+        # PEGA_TOXIPEP_DIR can be set after this is first called, and a
+        # cached False would then never recover.
+        return _toxipep_dir() is not None and cls._env_ready()
 
     def score(self, fasta_path: str | Path) -> pd.DataFrame:
         """Score sequences with ToxiPep.
