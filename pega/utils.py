@@ -458,6 +458,25 @@ def calculate_scores(
     dfs:    dict[str, pd.DataFrame] = {}
     errors: dict[str, str]          = {}
 
+    # Say how many of these measure a liability rather than activity —
+    # "12 predictors" otherwise reads as 12 activity scores. Announced for
+    # both paths; only the parallel one used to print anything.
+    n_liability = sum(
+        1 for cls in predictor_classes
+        if cls.score_column() in _LIABILITY_COLUMNS
+    )
+    split = (
+        f" ([bold]{total - n_liability}[/bold] activity, "
+        f"[bold]{n_liability}[/bold] liability)" if n_liability else ""
+    )
+    how = (
+        "sequentially" if max_workers == 1
+        else f"with [bold]{max_workers}[/bold] parallel workers"
+    )
+    noun = "predictor" if total == 1 else "predictors"
+    _console.print(f"  Running [bold]{total}[/bold] {noun}{split} {how}...")
+    print()
+
     if max_workers == 1:
         for i, cls in enumerate(predictor_classes, 1):
             _progress(i, total, cls.display_name)
@@ -479,11 +498,6 @@ def calculate_scores(
         _tqdm_module.tqdm.__init__ = _silent_init
         # Prevent joblib/loky conflicts with scikit-learn inside threads
         os.environ["LOKY_MAX_CPU_COUNT"] = "1"
-        _console.print(
-            f"  Running [bold]{total}[/bold] predictors with "
-            f"[bold]{max_workers}[/bold] parallel workers..."
-        )
-        print()
         completed = 0
 
         def _run(cls):
@@ -567,10 +581,22 @@ def calculate_scores(
             export_tsv = f"PEGA_results_{timestamp}.tsv"
         out_path = Path(export_tsv)
         merged.to_csv(out_path, sep="\t", index=False)
-        n_cols = len(merged.columns) - 1
+        # Break the column count down by kind — a bare total hides that
+        # some of these columns score the opposite of what the rest do.
+        n_ens  = sum(1 for c in merged.columns if c.startswith("ensemble_"))
+        n_liab = sum(1 for c in merged.columns if c in _LIABILITY_COLUMNS)
+        n_id   = sum(1 for c in ("seq_name", "original_header")
+                     if c in merged.columns)
+        n_act  = len(merged.columns) - n_ens - n_liab - n_id
+        parts  = [f"{n_act} activity", f"{n_ens} ensemble"]
+        if n_liab:
+            parts.append(f"{n_liab} liability")
         _console.print(
-            f"\n  [bold green]Saved[/bold green] → [bold]{out_path}[/bold]  "
-            f"({len(merged)} sequences, {n_cols} columns)"
+            f"\n  [bold green]Saved[/bold green] → [bold]{out_path}[/bold]"
+        )
+        _console.print(
+            f"  [dim]{len(merged)} sequences · "
+            f"{' · '.join(parts)} columns[/dim]"
         )
 
     # ── Cleanup ───────────────────────────────────────────────────────
