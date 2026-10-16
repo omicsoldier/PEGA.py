@@ -2,7 +2,7 @@
 # =============================================================================
 # PEGA — Environment Setup Script
 # =============================================================================
-# Creates the four conda environments required by PEGA predictors.
+# Creates the five conda environments required by PEGA predictors.
 #
 # Usage:
 #   bash setup_environments.sh            # create all environments
@@ -10,6 +10,7 @@
 #   bash setup_environments.sh amplify    # create only amplify_env
 #   bash setup_environments.sh pega       # create only pega_env
 #   bash setup_environments.sh hemo       # create only hemo_env
+#   bash setup_environments.sh tox        # create only tox_env
 #   bash setup_environments.sh --status   # show environment status
 #
 # After running this script, activate the main environment and install PEGA:
@@ -50,7 +51,7 @@ show_status() {
     echo ""
     echo "PEGA environment status"
     echo "────────────────────────────────────────"
-    for name in pega_env macrel_env amplify_env hemo_env; do
+    for name in pega_env macrel_env amplify_env hemo_env tox_env; do
         if env_exists "$name"; then
             ok "$name  [exists]"
         else
@@ -198,6 +199,32 @@ create_hemo_env() {
 }
 
 # ---------------------------------------------------------------------------
+# tox_env
+# ---------------------------------------------------------------------------
+
+create_tox_env() {
+    echo ""
+    echo "── tox_env ───────────────────────────────"
+    if env_exists "tox_env"; then
+        ok "tox_env already exists — skipping."
+        return 0
+    fi
+    # ToxinPred3 needs its own environment: its models are pickles fitted
+    # under scikit-learn 1.0.2 and fail to load under >= 1.3, which rules
+    # out both pega_env (>=1.3) and hemo_env (==1.3.1).
+    info "Creating tox_env from envs/tox_env.yml ..."
+    conda env create -f "${ENVS_DIR}/tox_env.yml"
+    ok "tox_env created."
+
+    # Quick smoke test
+    if conda run -n tox_env toxinpred3 -h &>/dev/null; then
+        ok "ToxinPred3 is functional."
+    else
+        fail "ToxinPred3 installed but 'toxinpred3 -h' failed — check the environment."
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -221,14 +248,15 @@ TARGET="${1:-all}"
 
 case "$TARGET" in
     --status)   show_status ;;
-    all)        create_pega_env; create_macrel_env; create_amplify_env; create_hemo_env ;;
+    all)        create_pega_env; create_macrel_env; create_amplify_env; create_hemo_env; create_tox_env ;;
     pega)       create_pega_env ;;
     macrel)     create_macrel_env ;;
     amplify)    create_amplify_env ;;
     hemo)       create_hemo_env ;;
+    tox)        create_tox_env ;;
     *)
         echo "Unknown argument: $TARGET"
-        echo "Usage: bash setup_environments.sh [all|pega|macrel|amplify|hemo|--status]"
+        echo "Usage: bash setup_environments.sh [all|pega|macrel|amplify|hemo|tox|--status]"
         exit 1
         ;;
 esac

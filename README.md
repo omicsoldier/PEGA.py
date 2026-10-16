@@ -49,10 +49,11 @@ saved automatically as TSV files. It supports datasets from a few sequences up t
 | 9 | modlAMP RF | Random Forest (PepCATS) | `pega_env` |
 | 10 | modlAMP SVM | SVM (PepCATS) | `pega_env` |
 | 11 | HemoPI2 (RF) | Random Forest — **haemolysis**, not activity | `hemo_env` |
+| 12 | ToxinPred3 (ET) | Extra Trees — **toxicity**, not activity | `tox_env` |
 
-Predictors 1–10 score antimicrobial activity. Predictor 11 scores a
-different endpoint — haemolytic toxicity — and is described under
-[Output](#hemolysis-columns).
+Predictors 1–10 score antimicrobial activity. Predictors 11 and 12 score
+different endpoints — liabilities rather than activity — and are
+described under [Output](#liability-columns).
 
 ## Validated Ensembles
 
@@ -235,6 +236,28 @@ conda env create -f envs/hemo_env.yml
 > (`Non-Hemolytic`). If melittin comes out low, the environment has
 > drifted — recreate it from the pinned yml.
 
+**ToxinPred3** (predictor 12, toxicity):
+```bash
+conda env create -f envs/tox_env.yml
+```
+
+> A third environment, for a hard reason rather than tidiness.
+> ToxinPred3's models are pickles fitted under `scikit-learn 1.0.2`, and
+> the tree node struct changed in 1.3, so loading them under anything
+> newer fails with `node array from the pickle has an incompatible
+> dtype`. That rules out `pega_env` (`>=1.3`) *and* `hemo_env`
+> (`==1.3.1`).
+>
+> Verify:
+> ```bash
+> printf '>melittin\nGIGAVLKVLTTGLPALISWIKRKRQQ\n>polyG\nGGGGGGGGGGGGGGGGGGGG\n' > _tox.fasta
+> conda run -n tox_env toxinpred3 -i _tox.fasta -m 1 -o _tox.csv
+> cat _tox.csv && rm -f _tox.fasta _tox.csv Sequence_1
+> ```
+> Expected: melittin ≈ 0.82, polyG ≈ 0.17. Note `-m 1`: ToxinPred3
+> defaults to `-m 2`, the MERCI hybrid, which scores melittin 0.32 and
+> calls bee venom non-toxic.
+
 ---
 
 ## Quick Start
@@ -275,7 +298,7 @@ PEGA screen --fasta large.fasta \
 PEGA_results_YYYYMMDD_HHMMSS.tsv
 ```
 
-Columns: `seq_name` | `original_header` | activity scores | ensemble scores | hemolysis scores
+Columns: `seq_name` | `original_header` | activity scores | ensemble scores | liability scores
 
 ### `PEGA screen` → folder with 3 files
 
@@ -284,7 +307,7 @@ PEGA_screen_YYYYMMDD_HHMMSS/
 ├── names.tsv       # pep_id | original_header | length
 ├── rejected.tsv    # original_header | length | reason
 ├── rejected.fasta  # FASTA of rejected sequences
-└── scores.tsv      # pep_id | activity scores | ensemble scores | hemolysis scores
+└── scores.tsv      # pep_id | activity scores | ensemble scores | liability scores
 ```
 
 Join scores ↔ names on `pep_id`:
@@ -297,35 +320,52 @@ df     = scores.merge(names, on="pep_id")
 ```
 
 All scores are probabilities in `[0, 1]`. Higher = more likely antimicrobial
-— except for the two haemolysis columns.
+— except for the three liability columns.
 
-<a id="hemolysis-columns"></a>
-### Hemolysis columns — higher is *worse*
+<a id="liability-columns"></a>
+### Liability columns — higher is *worse*
 
-Two columns score haemolytic toxicity rather than antimicrobial activity:
-the probability that the peptide lyses red blood cells. They are triage
-flags, to help you drop promising-but-haemolytic candidates.
+Three columns score a risk rather than antimicrobial activity. They are
+triage flags, to help you drop promising-but-risky candidates.
 
-| Column | Source | Notes |
-|--------|--------|-------|
-| `hemolysis_macrel_score` | Macrel's `Hemolytic_probability` | Free — Macrel already runs for `Macrel_score` |
-| `hemopi2_score` | HemoPI2 Random Forest (`hemo_env`) | AUC 0.888 on the authors' independent set |
+| Column | Endpoint | Source |
+|--------|----------|--------|
+| `hemolysis_macrel_score` | Lyses red blood cells | Macrel's `Hemolytic_probability` — free, Macrel already runs |
+| `hemopi2_score` | Lyses red blood cells | HemoPI2 Random Forest (`hemo_env`), AUC 0.888 |
+| `toxinpred3_score` | Is a toxin | ToxinPred3 Extra Trees (`tox_env`) |
 
-**Neither is consumed by any ensemble**, and both are dropped by
-`--no-individual-scores`, which keeps only `ensemble_*` columns. They are
-placed at the end of the table, after the ensembles, so the activity
-columns read as one block.
+**None is consumed by any ensemble**, and all are dropped by
+`--no-individual-scores`, which keeps only `ensemble_*` columns. They sit
+at the end of the table, after the ensembles, so the activity columns
+read as one block.
 
-Two caveats on `hemopi2_score`: HemoPI2 truncates sequences longer than
-40 residues to their first 40 before scoring, and its own
-hemolytic/non-hemolytic cutoff is 0.46, not 0.5.
+**Haemolysis and toxicity are not interchangeable**, which is why they
+are separate columns. Haemolysis is one specific mechanism — erythrocyte
+lysis. ToxinPred3 asks a broader and differently-framed question: does
+this look like a *toxin*, as found in venoms and bacterial toxins? The
+two disagree on real peptides. Magainin2, a benign frog AMP, scores 0.72
+on HemoPI2 but 1.00 on ToxinPred3; melittin, actual bee venom, scores
+0.97 and 0.82. A high `toxinpred3_score` on a designed AMP is common and
+is not on its own a safety finding — many membrane-active AMPs sit in
+ToxinPred's positive set. Read the columns together, not as substitutes.
 
-Why these two and not the others: of the published haemolysis predictors,
-most are web servers with no installable code (HemoPred, HAPPENN,
+Caveats on `hemopi2_score`: HemoPI2 truncates sequences longer than 40
+residues to their first 40 before scoring, and its own cutoff is 0.46,
+not 0.5. ToxinPred3's cutoff is 0.38.
+
+Why these and not the others: most published haemolysis and toxicity
+predictors are web servers with no installable code (HemoPred, HAPPENN,
 HLPpred-Fuse), and several have code or services that no longer run —
 the HemoPI2 authors report being unable to evaluate HLPpred-Fuse,
 HemoNet, hemolytic-Pred or Capecchi's RNN for exactly that reason. A web
 server is also unusable here: no batching, no offline reproducibility.
+
+Both tools ship a MERCI motif "hybrid" model that PEGA does not use. The
+hybrid adds a motif term to the ML score, and a non-match subtracts
+enough to floor the result: on HemoPI2 every test peptide collapsed to
+exactly 0.0, melittin included, and on ToxinPred3 melittin drops from
+0.82 to 0.32 and is relabelled non-toxic. That destroys the ranking a
+screen depends on, so PEGA uses the plain ML models.
 
 ---
 

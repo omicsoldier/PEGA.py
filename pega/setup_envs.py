@@ -13,6 +13,7 @@ pega_env      Main environment — all pip-installable predictors.
 macrel_env    Macrel predictor (bioconda).
 amplify_env   AMPlify predictor (bioconda).
 hemo_env      HemoPI2 haemolysis predictor (pip).
+tox_env       ToxinPred3 toxicity predictor (pip).
 
 R / ampir is handled separately since it requires a system R installation.
 """
@@ -50,6 +51,11 @@ _ENVIRONMENTS = {
         "yml": _ENVS_DIR / "hemo_env.yml",
         "description": "HemoPI2 haemolysis predictor environment (pip)",
         "check_cmd": ["hemopi2_classification", "-h"],
+    },
+    "tox_env": {
+        "yml": _ENVS_DIR / "tox_env.yml",
+        "description": "ToxinPred3 toxicity predictor environment (pip)",
+        "check_cmd": ["toxinpred3", "-h"],
     },
 }
 

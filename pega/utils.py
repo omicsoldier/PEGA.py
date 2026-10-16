@@ -22,10 +22,15 @@ from pega.registry import registry
 _CANONICAL_SET = set("ACDEFGHIKLMNPQRSTVWY")
 _console = Console()
 
-# Score columns that measure haemolytic toxicity rather than antimicrobial
-# activity. They are moved to the end of the output so the activity scores
-# and ensembles read as one block. Add new haemolysis columns here.
-_HEMOLYSIS_COLUMNS = ("hemolysis_macrel_score", "hemopi2_score")
+# Liability columns: these score a risk (haemolysis, toxicity) rather than
+# antimicrobial activity, so higher is worse. They are moved to the end of
+# the output so the activity scores and ensembles read as one block. Add
+# new haemolysis or toxicity columns here.
+_LIABILITY_COLUMNS = (
+    "hemolysis_macrel_score",
+    "hemopi2_score",
+    "toxinpred3_score",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -540,11 +545,12 @@ def calculate_scores(
         if valid_ens:
             merged = compute_ensembles(merged, ensemble_names=valid_ens)
 
-    # ── Hemolysis columns last ────────────────────────────────────────
-    hemo_cols = [c for c in _HEMOLYSIS_COLUMNS if c in merged.columns]
-    if hemo_cols:
+    # ── Liability columns last ────────────────────────────────────────
+    liability_cols = [c for c in _LIABILITY_COLUMNS if c in merged.columns]
+    if liability_cols:
         merged = merged[
-            [c for c in merged.columns if c not in hemo_cols] + hemo_cols
+            [c for c in merged.columns if c not in liability_cols]
+            + liability_cols
         ]
 
     # ── Drop individual scores if requested ───────────────────────────
