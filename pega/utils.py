@@ -13,7 +13,6 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from rich.console import Console
 
@@ -236,7 +235,7 @@ def screen_sequences(
     print(f"  Chunk size: {chunk_size:,} valid sequences")
     print()
 
-    print(f"  Counting sequences ...", end=" ", flush=True)
+    print("  Counting sequences ...", end=" ", flush=True)
     total_in_file = _count_fasta_seqs(fasta_path)
     print(f"{total_in_file:,}")
     print()

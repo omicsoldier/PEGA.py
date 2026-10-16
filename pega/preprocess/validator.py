@@ -93,6 +93,11 @@ def validate_fasta(
             f"{len(noncanonical)} sequence(s) with invalid characters {chars}"
         )
 
+    if dup_ids:
+        warnings.append(
+            f"{len(dup_ids)} duplicate sequence name(s) — PEGA renames them "
+            "internally, so results will not carry the original name twice"
+        )
     if short:
         warnings.append(f"{len(short)} sequence(s) < {_MIN_LEN} residues (may return NaN)")
     if ambiguous:

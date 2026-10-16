@@ -45,8 +45,8 @@ from __future__ import annotations
 
 import functools
 import os
-import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -97,9 +97,15 @@ class MacrelPredictor(BasePredictor):
             Columns: ``["seq_name", "Macrel_score"]``.
         """
         fasta_path = self._validate_fasta(fasta_path)
-        output_dir = "temp_macrel"
 
-        try:
+        # Scratch lives in a private temp dir. It used to be a relative
+        # "temp_macrel" in the process working directory, which collided
+        # between concurrent runs and, worse, was removed with rmtree in a
+        # finally block — deleting a user directory that happened to share
+        # the name. Macrel creates --output itself, so name a subdirectory
+        # that does not exist yet.
+        with tempfile.TemporaryDirectory(prefix="pega_macrel_") as scratch:
+            output_dir = os.path.join(scratch, "out")
             cmd = [
                 "conda", "run", "-n", _CONDA_ENV,
                 "macrel", "peptides",
@@ -110,8 +116,10 @@ class MacrelPredictor(BasePredictor):
 
             result = self._run_subprocess_with_progress(cmd, desc="Macrel")
             if result.returncode != 0:
-                raise subprocess.CalledProcessError(
-                    result.returncode, cmd, stderr=result.stderr
+                raise RuntimeError(
+                    f"Macrel failed (exit {result.returncode}).\n"
+                    f"{result.stderr}\n"
+                    "Check: conda env create -f envs/macrel_env.yml"
                 )
 
             # Locate and decompress the output file
@@ -145,14 +153,3 @@ class MacrelPredictor(BasePredictor):
             # a valid AMP score but an unparsable hemolysis value keeps the
             # former and carries NaN for the latter.
             return scores.dropna(subset=["Macrel_score"]).reset_index(drop=True)
-
-        except subprocess.CalledProcessError as exc:
-            raise RuntimeError(
-                f"Macrel failed (exit {exc.returncode}).\n"
-                f"{exc.stderr}\n"
-                "Check: conda create --name macrel_env -c bioconda macrel"
-            ) from exc
-
-        finally:
-            if os.path.exists(output_dir):
-                shutil.rmtree(output_dir)

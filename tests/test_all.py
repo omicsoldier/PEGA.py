@@ -26,9 +26,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from Bio import SeqIO
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -77,7 +74,7 @@ def main() -> int:
     from pega.operators.crossover import (
         crossover, available_methods, experimental_methods,
         single_point_crossover, two_point_crossover,
-        uniform_crossover, cut_and_splice,
+        uniform_crossover,
     )
 
     P1, P2 = "ACDEFGHIKL", "LKIHGFEDCA"
@@ -148,8 +145,7 @@ def main() -> int:
 
     from pega.operators.mutation import (
         mutate, insert_aa, delete_aa,
-        available_strategies, experimental_strategies,
-        BLOSUM62, PAM30, PAM250, PROPERTY_GROUPS, _AA_TO_GROUP,
+        available_strategies, BLOSUM62, PAM30, PAM250, PROPERTY_GROUPS, _AA_TO_GROUP,
     )
 
     SEQ = "ACDEFGHIKL"
@@ -214,8 +210,8 @@ def main() -> int:
     for _ in range(100):
         ok_ins += (len(insert_aa(SEQ)) == len(SEQ)+1)
         ok_del += (len(delete_aa(SEQ)) == len(SEQ)-1)
-    check(ok_ins == 100, f"insert: correct length (100/100)")
-    check(ok_del == 100, f"delete: correct length (100/100)")
+    check(ok_ins == 100, "insert: correct length (100/100)")
+    check(ok_del == 100, "delete: correct length (100/100)")
 
     print("\n  ── error handling ──")
     for fn, args, label in [
@@ -431,7 +427,7 @@ def main() -> int:
         check(all(result[c].dropna().between(0, 1).all() for c in score_cols),
               "all predictor scores ∈ [0,1]")
 
-        print(f"\n  Preview (first 3 rows):")
+        print("\n  Preview (first 3 rows):")
         pd.set_option("display.max_columns", 6)
         pd.set_option("display.width", 120)
         preview_cols = ["seq_name"] + score_cols[:3] + ensemble_cols[:3]

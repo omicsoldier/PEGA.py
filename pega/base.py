@@ -154,14 +154,22 @@ class BasePredictor(abc.ABC):
         with tempfile.TemporaryDirectory() as io_dir:
             stdout_path = os.path.join(io_dir, "stdout.txt")
             stderr_path = os.path.join(io_dir, "stderr.txt")
-            result_holder: dict[str, int] = {}
+            result_holder: dict[str, object] = {}
 
             def _run() -> None:
-                with open(stdout_path, "wb") as out_f, open(stderr_path, "wb") as err_f:
-                    proc = subprocess.run(
-                        cmd, stdout=out_f, stderr=err_f, cwd=cwd, env=env,
-                    )
-                result_holder["returncode"] = proc.returncode
+                # Hand any failure back to the caller. Without this a
+                # missing executable or bad cwd raises inside the thread,
+                # which only prints a traceback, and the caller then dies
+                # on a bare KeyError that names neither cause.
+                try:
+                    with open(stdout_path, "wb") as out_f, \
+                         open(stderr_path, "wb") as err_f:
+                        proc = subprocess.run(
+                            cmd, stdout=out_f, stderr=err_f, cwd=cwd, env=env,
+                        )
+                    result_holder["returncode"] = proc.returncode
+                except BaseException as exc:  # noqa: BLE001
+                    result_holder["error"] = exc
 
             thread = threading.Thread(target=_run, daemon=True)
             thread.start()
@@ -173,6 +181,9 @@ class BasePredictor(abc.ABC):
                     if pbar.n < 80:
                         pbar.update(2)
                 pbar.update(100 - pbar.n)
+
+            if "error" in result_holder:
+                raise result_holder["error"]
 
             stdout = Path(stdout_path).read_text(errors="replace")
             stderr = Path(stderr_path).read_text(errors="replace")
