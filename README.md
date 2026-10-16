@@ -52,8 +52,9 @@ saved automatically as TSV files. It supports datasets from a few sequences up t
 | 12 | ToxinPred3 (ET) | Extra Trees — **toxicity**, not activity | `tox_env` |
 | 13 | ToxiPep | BiGRU/Transformer + atomic graph — **toxicity** | `toxipep_env` + checkout |
 | 14 | AlgPred2 | **Allergenicity**, not activity | `tox_env` |
+| 15 | HemoPI2 (ESM2) | ESM2-t6 — **haemolysis**, not activity | `hemo_env` |
 
-Predictors 1–10 score antimicrobial activity. Predictors 11–14 score
+Predictors 1–10 score antimicrobial activity. Predictors 11–15 score
 different endpoints — liabilities rather than activity — and are
 described under [Output](#liability-columns).
 
@@ -327,7 +328,12 @@ results_PEGA/PEGA_results_YYYYMMDD_HHMMSS.tsv
 
 Columns: `seq_name` | `original_header` | activity scores | ensemble scores | liability scores
 
-Written to `results_PEGA/` unless `--out` names another path. An explicit
+Written to `results_PEGA/` unless `--out` names another path. Scores are
+rounded to 4 decimals in the file; the DataFrame returned by the Python
+API keeps full precision. After each run PEGA prints a legend naming
+which columns are activity, which are ensembles, and which are
+liabilities — a bare TSV header does not say that the groups point in
+opposite directions. An explicit
 `--out` is used exactly as given, and its parent directories are created
 if missing.
 
@@ -363,6 +369,7 @@ triage flags, to help you drop promising-but-risky candidates.
 |--------|----------|--------|
 | `hemolysis_macrel_score` | Lyses red blood cells | Macrel's `Hemolytic_probability` — free, Macrel already runs |
 | `hemopi2_score` | Lyses red blood cells | HemoPI2 Random Forest (`hemo_env`), AUC 0.888 |
+| `hemopi2_esm_score` | Lyses red blood cells | HemoPI2 ESM2-t6 (`hemo_env`), AUC 0.919 |
 | `toxinpred3_score` | Is a toxin | ToxinPred3 Extra Trees (`tox_env`) |
 | `toxipep_score` | Is a toxin | ToxiPep (`toxipep_env` + your own checkout) |
 | `algpred2_score` | Provokes an allergic response | AlgPred 2.0 (`tox_env`, shared with ToxinPred3) |
@@ -406,7 +413,14 @@ the HemoPI2 authors report being unable to evaluate HLPpred-Fuse,
 HemoNet, hemolytic-Pred or Capecchi's RNN for exactly that reason. A web
 server is also unusable here: no batching, no offline reproducibility.
 
-Both tools ship a MERCI motif "hybrid" model that PEGA does not use. The
+HemoPI2 is reported through **two** models, Random Forest and ESM2-t6,
+rather than one. They agree only moderately (Spearman 0.66 over a
+25-peptide panel), so the disagreement is informative. Where they differ
+on low-complexity sequences, trust the RF: ESM2 scored poly-Gly, poly-Ser
+and poly-Ala as haemolytic, and a genetic algorithm produces such
+sequences in quantity.
+
+All three tools ship a MERCI motif "hybrid" model that PEGA does not use. The
 hybrid adds a motif term to the ML score, and a non-match subtracts
 enough to floor the result: on HemoPI2 every test peptide collapsed to
 exactly 0.0, melittin included, and on ToxinPred3 melittin drops from

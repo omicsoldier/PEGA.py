@@ -43,6 +43,7 @@ https://github.com/raghavagps/hemopi2
 
 from __future__ import annotations
 
+import abc
 import functools
 import os
 import subprocess
@@ -58,21 +59,17 @@ _CONDA_ENV = "hemo_env"
 # -m 1 selects the Random Forest classifier; see the module docstring for
 # why the heavier ESM2/MERCI models are not the default.
 _MODEL_RF = "1"
+_MODEL_ESM = "3"
 
 
-class HemoPI2Predictor(BasePredictor):
-    """HemoPI2 Random Forest haemolysis predictor (conda).
+class _HemoPI2Base(BasePredictor, abc.ABC):
+    """Shared plumbing for HemoPI2's two non-hybrid models."""
 
-    Requires::
-
-        conda env create -f envs/hemo_env.yml
-    """
-
-    name = "hemopi2"
-    display_name = "HemoPI2 (RF)"
-    predictor_id = 11
-    description = "Random Forest haemolytic-activity predictor (HemoPI2, conda)."
     category = "conda"
+
+    #: HemoPI2 -m value, and the score column its CSV carries.
+    _model: str
+    _csv_column: str
 
     @classmethod
     @functools.lru_cache(maxsize=None)
@@ -100,7 +97,7 @@ class HemoPI2Predictor(BasePredictor):
         with tempfile.TemporaryDirectory(prefix="pega_hemopi2_") as work_dir:
             # -o takes a bare filename: HemoPI2 writes it inside -wd, so an
             # absolute path here would be appended to the working directory.
-            result_name = "hemopi2_out.csv"
+            result_name = f"{self.name}_out.csv"
             cmd = [
                 "conda", "run", "-n", _CONDA_ENV,
                 "hemopi2_classification",
@@ -108,7 +105,7 @@ class HemoPI2Predictor(BasePredictor):
                 "-wd", work_dir,
                 "-o", result_name,
                 "-j", "1",
-                "-m", _MODEL_RF,
+                "-m", self._model,
                 "-d", "2",
             ]
 
@@ -129,12 +126,41 @@ class HemoPI2Predictor(BasePredictor):
 
             raw = pd.read_csv(result_file)
 
-        scores = raw[["SeqID", "ML Score"]].rename(
-            columns={"SeqID": "seq_name", "ML Score": "hemopi2_score"}
+        col = self.score_column()
+        scores = raw[["SeqID", self._csv_column]].rename(
+            columns={"SeqID": "seq_name", self._csv_column: col}
         )
         scores["seq_name"] = scores["seq_name"].astype(str)
-        scores["hemopi2_score"] = pd.to_numeric(
-            scores["hemopi2_score"], errors="coerce"
-        )
+        scores[col] = pd.to_numeric(scores[col], errors="coerce")
 
-        return scores.dropna(subset=["hemopi2_score"]).reset_index(drop=True)
+        return scores.dropna(subset=[col]).reset_index(drop=True)
+
+
+class HemoPI2Predictor(_HemoPI2Base):
+    """HemoPI2 Random Forest haemolysis predictor (conda)."""
+
+    name = "hemopi2"
+    display_name = "HemoPI2 (RF)"
+    predictor_id = 11
+    description = "Random Forest haemolytic-activity predictor (HemoPI2, conda)."
+    _model = _MODEL_RF
+    _csv_column = "ML Score"
+
+
+class HemoPI2ESMPredictor(_HemoPI2Base):
+    """HemoPI2 ESM2-t6 haemolysis predictor (conda).
+
+    Reported alongside the Random Forest rather than instead of it: the
+    two agree only moderately (Spearman 0.66 across a 25-peptide panel),
+    so the disagreement carries information. Where they differ on
+    low-complexity sequences, trust the RF — ESM2 called poly-Gly,
+    poly-Ser and poly-Ala haemolytic, which a genetic algorithm will
+    produce in quantity.
+    """
+
+    name = "hemopi2_esm"
+    display_name = "HemoPI2 (ESM2)"
+    predictor_id = 15
+    description = "ESM2-t6 haemolytic-activity predictor (HemoPI2, conda)."
+    _model = _MODEL_ESM
+    _csv_column = "ESM Score"

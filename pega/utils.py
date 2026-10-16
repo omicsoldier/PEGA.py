@@ -29,13 +29,56 @@ _console = Console()
 # name an output path of its own.
 _DEFAULT_RESULTS_DIR = "results_PEGA"
 
-_LIABILITY_COLUMNS = (
-    "hemolysis_macrel_score",
-    "hemopi2_score",
-    "toxinpred3_score",
-    "toxipep_score",
-    "algpred2_score",
+# Liability columns by endpoint, in the order they appear in the output.
+# These score a risk rather than antimicrobial activity, so higher is
+# worse. Add new ones to the group they belong to.
+_LIABILITY_GROUPS: dict[str, tuple[str, ...]] = {
+    "hemolysis": (
+        "hemolysis_macrel_score",
+        "hemopi2_score",
+        "hemopi2_esm_score",
+    ),
+    "toxicity": (
+        "toxinpred3_score",
+        "toxipep_score",
+    ),
+    "allergenicity": (
+        "algpred2_score",
+    ),
+}
+
+_LIABILITY_COLUMNS = tuple(
+    col for cols in _LIABILITY_GROUPS.values() for col in cols
 )
+
+
+def _column_groups(df: pd.DataFrame) -> list[tuple[str, list[str]]]:
+    """Group the output columns by what they measure, in file order."""
+    ids = [c for c in ("seq_name", "original_header") if c in df.columns]
+    ens = [c for c in df.columns if c.startswith("ensemble_")]
+    activity = [
+        c for c in df.columns
+        if c not in ids and c not in ens and c not in _LIABILITY_COLUMNS
+    ]
+    groups = [("identifiers", ids), ("activity", activity), ("ensembles", ens)]
+    for label, cols in _LIABILITY_GROUPS.items():
+        present = [c for c in cols if c in df.columns]
+        if present:
+            groups.append((label, present))
+    return [(label, cols) for label, cols in groups if cols]
+
+
+def _print_column_legend(df: pd.DataFrame) -> None:
+    """Print which output columns belong to which group."""
+    groups = _column_groups(df)
+    width = max(len(label) for label, _ in groups)
+    _console.print()
+    for label, cols in groups:
+        arrow = " [dim](higher = worse)[/dim]" if any(
+            c in _LIABILITY_COLUMNS for c in cols
+        ) else ""
+        _console.print(f"  [bold]{label:<{width}}[/bold]  {len(cols)}{arrow}")
+        _console.print(f"  {'':<{width}}  [dim]{', '.join(cols)}[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -590,24 +633,23 @@ def calculate_scores(
         # Also covers an explicit --out into a directory that does not
         # exist yet, which used to fail at write time.
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        merged.to_csv(out_path, sep="\t", index=False)
-        # Break the column count down by kind — a bare total hides that
-        # some of these columns score the opposite of what the rest do.
-        n_ens  = sum(1 for c in merged.columns if c.startswith("ensemble_"))
-        n_liab = sum(1 for c in merged.columns if c in _LIABILITY_COLUMNS)
-        n_id   = sum(1 for c in ("seq_name", "original_header")
-                     if c in merged.columns)
-        n_act  = len(merged.columns) - n_ens - n_liab - n_id
-        parts  = [f"{n_act} activity", f"{n_ens} ensemble"]
-        if n_liab:
-            parts.append(f"{n_liab} liability")
+        # Rounded only on the way out: predictors report 3-4 significant
+        # digits, so full float repr is noise in a file meant to be read.
+        # The returned DataFrame keeps full precision.
+        merged.round(4).to_csv(out_path, sep="\t", index=False)
         _console.print(
             f"\n  [bold green]Saved[/bold green] → [bold]{out_path}[/bold]"
         )
         _console.print(
             f"  [dim]{len(merged)} sequences · "
-            f"{' · '.join(parts)} columns[/dim]"
+            f"{len(merged.columns)} columns[/dim]"
         )
+        if not quiet:
+            # Name the groups. The columns are ordered this way in the file,
+            # but nothing in a bare TSV header says which score measures
+            # activity and which measures a liability — and they point in
+            # opposite directions.
+            _print_column_legend(merged)
 
     # ── Cleanup ───────────────────────────────────────────────────────
     if _tmp_fasta is not None and _tmp_fasta.exists():
