@@ -3,13 +3,13 @@ PEGA — Peptide Evolution via Genetic Algorithm
 ===============================================
 Multi-predictor ensemble scoring for antimicrobial peptide research.
 
-https://github.com/fcabezasmera/PEGA
+https://github.com/omicsoldier/PEGA.py
 """
 
 from __future__ import annotations
 
 __version__ = "0.1.0"
-__author__ = "fcabezasmera"
+__author__ = "omicsoldier"
 __license__ = "MIT"
 
 __all__ = [

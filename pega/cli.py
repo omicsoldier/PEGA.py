@@ -86,7 +86,7 @@ def _print_banner() -> None:
             f"  [bold]Peptide Evolution via Genetic Algorithm[/bold]  "
             f"[green]v{version}[/green]"
         )
-        console.print("  [dim]https://github.com/fcabezasmera/PEGA[/dim]\n")
+        console.print("  [dim]https://github.com/omicsoldier/PEGA.py[/dim]\n")
     else:
         console.print(
             f"[bold cyan]PEGA[/bold cyan] [green]v{version}[/green] "

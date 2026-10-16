@@ -16,8 +16,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/)
-[![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/fcabezasmera/PEGA)
-[![Predictors](https://img.shields.io/badge/predictors-10-teal.svg)](https://github.com/fcabezasmera/PEGA)
+[![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/omicsoldier/PEGA.py)
+[![Predictors](https://img.shields.io/badge/predictors-10-teal.svg)](https://github.com/omicsoldier/PEGA.py)
 
 *Multi-predictor ensemble scoring for antimicrobial peptide research*
 
@@ -100,8 +100,8 @@ out-of-fold, not the in-sample figure.
 ### Step 1 — Clone
 
 ```bash
-git clone https://github.com/fcabezasmera/PEGA.git
-cd PEGA
+git clone https://github.com/omicsoldier/PEGA.py.git
+cd PEGA.py
 ```
 
 > Model weights (~106 MB) are stored via Git LFS. If `git-lfs` isn't
@@ -319,10 +319,10 @@ PEGA/
 
 ```bibtex
 @software{pega2025,
-  author = {fcabezasmera},
+  author = {omicsoldier},
   title  = {PEGA.py: Peptide Evolution via Genetic Algorithm},
   year   = {2025},
-  url    = {https://github.com/fcabezasmera/PEGA}
+  url    = {https://github.com/omicsoldier/PEGA.py}
 }
 ```
 
