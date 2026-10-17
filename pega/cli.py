@@ -218,6 +218,7 @@ def cmd_score(args: argparse.Namespace) -> int:
         calculate_scores(
             fasta_path=fasta,
             predictor_names=predictors,
+            exclude_predictors=args.exclude or None,
             export_tsv=args.out,
             jobs=args.jobs,
             quiet=args.quiet,
@@ -258,6 +259,7 @@ def cmd_screen(args: argparse.Namespace) -> int:
             fasta_path=fasta,
             output_dir=getattr(args, "dir", None),
             chunk_size=args.chunk,
+            exclude_predictors=args.exclude or None,
             ensemble_names=ensemble_names,
             no_individual_scores=getattr(args, "no_individual_scores", False),
             jobs=args.jobs,
@@ -337,6 +339,9 @@ def _build_parser() -> argparse.ArgumentParser:
     # score
     sp = sub.add_parser("score", help="Score sequences in a FASTA file.")
     sp.add_argument("--fasta", "-f", required=True, metavar="FILE")
+    sp.add_argument("--exclude", "-x", nargs="+", metavar="NAME",
+                    help="Predictor names to leave out. Applied after "
+                         "--predictors, so the two combine. Default: exclude none.")
     sp.add_argument("--predictors", "-p", nargs="+", metavar="NAME",
                     help="Predictor names (run 'PEGA list' for names). Default: all.")
     sp.add_argument("--out", "-o", metavar="FILE",
@@ -369,6 +374,8 @@ def _build_parser() -> argparse.ArgumentParser:
     scrp.add_argument("--chunk", type=int, default=50_000, metavar="N",
                       help="Sequences per chunk (default: 50,000). Reduce to 10,000 if RAM < 16 GB. "
                            "Increase to 50,000 if you have ≥32 GB RAM.")
+    scrp.add_argument("--exclude", "-x", nargs="+", metavar="NAME",
+                      help="Predictor names to leave out. Default: exclude none.")
     scrp.add_argument("--ensembles", "-e", nargs="+", metavar="NAME",
                       help="Only compute specific ensembles, e.g. AMP_screen ABP_screen "
                            "(activity AMP/AVP/AFP/APP/ABP + _class or _screen). "

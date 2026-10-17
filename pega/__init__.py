@@ -22,6 +22,7 @@ __all__ = [
 def score(
     fasta_path: str,
     predictors: list[str] | None = None,
+    exclude: list[str] | None = None,
     ensemble: bool = True,
     export_tsv: str | None = None,
 ):
@@ -34,6 +35,10 @@ def score(
     predictors:
         List of predictor names to use (e.g. ``["ampnet", "modlamp_rf"]``).
         If ``None``, all available predictors are used automatically.
+    exclude:
+        Predictor names to leave out (e.g. ``["toxipep"]``). Applied after
+        ``predictors``, so the two combine and exclusion wins. Unknown
+        names raise rather than being ignored.
     ensemble:
         If ``True`` (default), validated ensemble scores are appended
         to the output DataFrame. If ``False``, only individual predictor
@@ -54,6 +59,7 @@ def score(
     return calculate_scores(
         fasta_path=fasta_path,
         predictor_names=predictors,
+        exclude_predictors=exclude,
         ensemble_names=None if ensemble else [],
         export_tsv=export_tsv,
         # A library call should hand back data, not write files nobody

@@ -170,6 +170,7 @@ def screen_sequences(
     output_dir: str | Path | None = None,
     chunk_size: int = 50_000,
     predictor_names: list[str] | None = None,
+    exclude_predictors: list[str] | None = None,
     ensemble_names: list[str] | None = None,
     no_individual_scores: bool = False,
     jobs: int = -1,
@@ -328,6 +329,7 @@ def screen_sequences(
             df = calculate_scores(
                 fasta_path=tmp_path,
                 predictor_names=predictor_names,
+                exclude_predictors=exclude_predictors,
                 ensemble_names=ensemble_names,
                 no_individual_scores=no_individual_scores,
                 jobs=jobs,
@@ -399,6 +401,7 @@ def screen_sequences(
 def calculate_scores(
     fasta_path: str | Path,
     predictor_names: list[str] | None = None,
+    exclude_predictors: list[str] | None = None,
     export_tsv: str | Path | None = None,
     jobs: int = 1,
     validate: bool = True,
@@ -419,6 +422,11 @@ def calculate_scores(
         Names (as in ``PEGA list``) to run. ``None`` runs every available
         predictor, except that naming ``ensemble_names`` without this
         narrows the set to the predictors those ensembles need.
+    exclude_predictors : list[str] or None
+        Names to leave out. Applied after ``predictor_names``, so the two
+        can be combined and exclusion wins. Unknown names raise rather
+        than being ignored, since a typo would otherwise silently run the
+        predictor you meant to skip.
     export_tsv : str or Path or None
         Where to write the TSV. ``None`` writes
         ``results_PEGA/PEGA_results_<timestamp>.tsv``. An explicit path is
@@ -519,6 +527,12 @@ def calculate_scores(
             predictor_classes.append(cls)
     else:
         predictor_classes = registry.list_available()
+
+    if exclude_predictors:
+        # registry.get raises on an unknown name, which is what we want:
+        # a mistyped exclusion must not quietly leave the predictor in.
+        excluded = {registry.get(n).name for n in exclude_predictors}
+        predictor_classes = [c for c in predictor_classes if c.name not in excluded]
 
     if not predictor_classes:
         raise ValueError("No predictors available. Run 'PEGA list'.")

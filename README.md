@@ -346,6 +346,9 @@ PEGA validate --fasta sequences.fasta
 # Score (all predictors + ensembles)
 PEGA score --fasta sequences.fasta --jobs -1 --quiet
 
+# Score, leaving predictors out (default: run every available one)
+PEGA score --fasta sequences.fasta --exclude toxipep algpred2
+
 # Score — ensemble columns only (faster)
 PEGA score --fasta sequences.fasta \
     --ensembles AMP_class AFP_class APP_class ABP_class \
@@ -482,6 +485,10 @@ df = pega.score("sequences.fasta")
 df = pega.score("sequences.fasta",
                 predictors=["ampnet", "amp_cg", "modlamp_rf"])
 
+# Or run everything except a few. Combines with `predictors`, and
+# exclusion wins; an unknown name raises rather than being ignored.
+df = pega.score("sequences.fasta", exclude=["toxipep", "algpred2"])
+
 # Score and export
 df = pega.score("sequences.fasta", export_tsv="results.tsv")
 
@@ -492,6 +499,41 @@ df = pega.score("sequences.fasta", export_tsv="results.tsv")
 for p in pega.list_predictors(available_only=True):
     print(p["predictor_id"], p["name"], p["category"])
 ```
+
+---
+
+## Genetic algorithm
+
+`pega.population.compute_fitness` sets the value the selection operators
+maximise. It always writes `mean_geometric`, whatever the source, since
+that is the column `pega.operators.selection` reads.
+
+```python
+from pega.population import score_sequences, compute_fitness
+from pega.operators.selection import elitism
+
+pop = score_sequences(["GIGKFLHSAKKFGKAFVGEIMNS", "FLPLIGRVLSGIL"])
+
+# Default: geometric mean across every individual predictor column
+pop = compute_fitness(pop)
+
+# Drive selection with one predictor — by name or by column
+pop = compute_fitness(pop, fitness="ampnet")
+pop = compute_fitness(pop, fitness="AMPnet_score")
+
+# Or with an ensemble
+pop = compute_fitness(pop, fitness="ensemble_AMP_class_score")
+
+parents = elitism(pop, n=10)
+```
+
+A single predictor is the intended mode for now; a weighted or dynamic
+fitness function comes later.
+
+**Liability columns are refused as fitness.** Selection maximises, so
+using `hemopi2_score` or `toxinpred3_score` would evolve the population
+*towards* haemolysis or toxicity. `compute_fitness` raises a `ValueError`
+naming the problem rather than letting that run.
 
 ---
 

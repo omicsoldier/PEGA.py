@@ -3,7 +3,7 @@ pega.operators.selection
 ========================
 Genetic algorithm selection operators.
 
-All functions receive a population DataFrame with a ``geometric_mean`` column
+All functions receive a population DataFrame with a ``mean_geometric`` column
 produced by :func:`pega.utils.calculate_scores` and return a DataFrame of
 the selected individuals.
 
@@ -26,9 +26,17 @@ _FITNESS_COL = "mean_geometric"
 
 def proportional(population: pd.DataFrame, n: int) -> pd.DataFrame:
     """Fitness-proportionate (roulette wheel) selection."""
+    n = min(n, len(population))
     fitness = population[_FITNESS_COL].clip(lower=0)
     total = fitness.sum()
-    probs = fitness / total if total > 0 else np.ones(len(population)) / len(population)
+    # Drawing without replacement needs at least n entries with non-zero
+    # probability, so a population where too few individuals carry any
+    # fitness falls back to uniform instead of raising "Fewer non-zero
+    # entries in p than size".
+    if total > 0 and (fitness > 0).sum() >= n:
+        probs = fitness / total
+    else:
+        probs = np.ones(len(population)) / len(population)
     idx = np.random.choice(population.index, size=n, replace=False, p=probs)
     return population.loc[idx]
 
@@ -91,7 +99,7 @@ def selection(
     Parameters
     ----------
     population:
-        Scored population DataFrame with a ``geometric_mean`` column.
+        Scored population DataFrame with a ``mean_geometric`` column.
     n:
         Number of individuals to select.
     method:
