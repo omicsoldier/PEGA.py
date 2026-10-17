@@ -309,25 +309,69 @@ def score_sequences(
     return scored[cols].reset_index(drop=True)
 
 
-def compute_fitness(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute geometric mean fitness across predictor score columns.
+def compute_fitness(
+    df: pd.DataFrame,
+    fitness: str | None = None,
+) -> pd.DataFrame:
+    """Set the fitness the selection operators maximise.
 
-    Uses individual predictor ``*_score`` columns (excluding ensemble
-    columns) to compute the geometric mean, which is stored as
-    ``mean_geometric`` and consumed by ``pega.operators.selection``.
+    The result always lands in ``mean_geometric``, whatever the source,
+    because that is the column ``pega.operators.selection`` reads.
 
     Parameters
     ----------
     df : pd.DataFrame
         Population DataFrame from ``score_sequences()``.
+    fitness : str or None
+        Which score drives selection. A predictor name (``"ampnet"``), its
+        score column (``"AMPnet_score"``) or an ensemble column
+        (``"ensemble_AMP_class_score"``). ``None`` keeps the default: the
+        geometric mean across every individual predictor column.
 
     Returns
     -------
     pd.DataFrame
         Input DataFrame with ``mean_geometric`` added or updated.
+
+    Raises
+    ------
+    ValueError
+        If ``fitness`` names no usable column, or names a liability
+        column — selection maximises, so a haemolysis or toxicity score
+        would evolve the population *towards* that liability.
     """
-    # Ensemble columns and id columns are excluded
     exclude = {"seq_name", "seq_aa", "original_header", "mean_geometric"}
+
+    if fitness is not None:
+        from pega.utils import _LIABILITY_COLUMNS
+
+        column = fitness
+        if column not in df.columns:
+            # A predictor's column is not its name plus "_score" — ampnet
+            # emits AMPnet_score — so resolve it through the registry.
+            from pega.registry import registry
+            try:
+                column = registry.get(fitness).score_column()
+            except Exception:
+                column = fitness
+        if column not in df.columns:
+            available = [c for c in df.columns
+                         if c.endswith("_score") and c not in exclude]
+            raise ValueError(
+                f"Fitness '{fitness}' matches no column in the population. "
+                f"Available: {available}"
+            )
+        if column in _LIABILITY_COLUMNS:
+            raise ValueError(
+                f"'{column}' scores a liability, where higher is worse, and "
+                "the selection operators maximise fitness — using it would "
+                "evolve the population towards that liability. Pick an "
+                "activity or ensemble column instead."
+            )
+        df["mean_geometric"] = pd.to_numeric(df[column], errors="coerce").fillna(0)
+        return df
+
+    # Default: geometric mean over the individual predictor columns.
     score_cols = [
         c for c in df.columns
         if c.endswith("_score") and not c.startswith("ensemble_")
