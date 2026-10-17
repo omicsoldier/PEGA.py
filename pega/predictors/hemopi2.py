@@ -51,6 +51,7 @@ import tempfile
 from pathlib import Path
 
 import pandas as pd
+from Bio import SeqIO
 
 from pega.base import BasePredictor
 
@@ -70,6 +71,8 @@ class _HemoPI2Base(BasePredictor, abc.ABC):
     #: HemoPI2 -m value, and the score column its CSV carries.
     _model: str
     _csv_column: str
+    #: Sequences per invocation, or None to pass the whole file at once.
+    _max_batch: int | None = None
 
     @classmethod
     @functools.lru_cache(maxsize=None)
@@ -94,6 +97,25 @@ class _HemoPI2Base(BasePredictor, abc.ABC):
         """
         fasta_path = self._validate_fasta(fasta_path)
 
+        if self._max_batch is None:
+            return self._score_batch(fasta_path)
+
+        records = list(SeqIO.parse(str(fasta_path), "fasta"))
+        if len(records) <= self._max_batch:
+            return self._score_batch(fasta_path)
+
+        # Sequentially, on purpose: the point is to bound peak memory, so
+        # running the shards concurrently would defeat it.
+        frames = []
+        with tempfile.TemporaryDirectory(prefix="pega_hemopi2_shards_") as shards:
+            for start in range(0, len(records), self._max_batch):
+                shard = os.path.join(shards, f"shard_{start}.fasta")
+                SeqIO.write(records[start:start + self._max_batch], shard, "fasta")
+                frames.append(self._score_batch(Path(shard)))
+        return pd.concat(frames, ignore_index=True)
+
+    def _score_batch(self, fasta_path: Path) -> pd.DataFrame:
+        """Run HemoPI2 once over every sequence in ``fasta_path``."""
         with tempfile.TemporaryDirectory(prefix="pega_hemopi2_") as work_dir:
             # -o takes a bare filename: HemoPI2 writes it inside -wd, so an
             # absolute path here would be appended to the working directory.
@@ -164,3 +186,10 @@ class HemoPI2ESMPredictor(_HemoPI2Base):
     description = "ESM2-t6 haemolytic-activity predictor (HemoPI2, conda)."
     _model = _MODEL_ESM
     _csv_column = "ESM Score"
+    # HemoPI2 tokenises the whole input file and pushes it through ESM2 in
+    # a single forward pass, with no batching of its own and the device
+    # hardcoded to CUDA when one is present. Peak memory therefore scales
+    # with the file, and a screening chunk of 10k sequences exhausts an
+    # 8 GB card outright. Feeding it in fixed slices bounds that; the RF
+    # model needs none of this and keeps _max_batch = None.
+    _max_batch = 512
