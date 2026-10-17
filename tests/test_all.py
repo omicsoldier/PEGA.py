@@ -175,7 +175,8 @@ def main() -> int:
         for _ in range(20):
             m = mutate(aa * 8, mutation_rate=0.5, strategy="property")
             if not all(r in PROPERTY_GROUPS[grp] for r in m):
-                ok_grp = False; break
+                ok_grp = False
+                break
         check(ok_grp, f"property({aa}): always stays in '{grp}'")
 
     print("\n  ── charge_biased: >50% cationic (K,R,H) ──")

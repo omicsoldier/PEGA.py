@@ -103,8 +103,32 @@ out-of-fold, not the in-sample figure.
 
 - Linux 64-bit
 - Miniconda or Anaconda
-- mamba (recommended)
-- git with Git LFS
+- **mamba** — required, not optional: conda cannot resolve AMPlify's
+  Python 3.6 dependency tree. `conda install -n base -c conda-forge mamba`
+- **git-lfs**, installed *before* cloning — the model weights come through
+  Git LFS
+- R ≥ 4.5 — installed into `pega_env` by its yml, no system R needed
+
+### What gets installed
+
+PEGA runs 15 predictors across 6 conda environments. Each external tool
+is pinned in its own environment because their dependencies genuinely
+conflict — the notes under each step explain why.
+
+| Environment | Predictors | Why separate |
+|-------------|-----------|--------------|
+| `pega_env` | 1–5, 9, 10 (AMPnet, amPEPpy, ampir ×2, AMP_CG, modlAMP ×2) | Main environment; also hosts the R/ampir install |
+| `macrel_env` | 6 (Macrel + its haemolysis score) | bioconda package, pinned sklearn/numpy/scipy |
+| `amplify_env` | 7, 8 (AMPlify balanced/imbalanced) | Needs Python 3.6 |
+| `hemo_env` | 11, 15 (HemoPI2 RF and ESM2) | Pins `scikit-learn==1.3.1` |
+| `tox_env` | 12, 14 (ToxinPred3, AlgPred2) | Pins `scikit-learn==1.0.2` + `numpy==1.22.4` |
+| `toxipep_env` | 13 (ToxiPep) | Pins `numpy<2` for rdkit; the tool itself is cloned, not installed |
+
+Predictors 1–10 score antimicrobial **activity**. Predictors 11–15 score
+**liabilities** — haemolysis, toxicity, allergenicity — where a higher
+score is worse. See [Liability columns](#liability-columns).
+
+Everything runs on CPU. No root or sudo is needed at any point.
 
 ### Quick path
 
@@ -460,6 +484,13 @@ df = pega.score("sequences.fasta",
 
 # Score and export
 df = pega.score("sequences.fasta", export_tsv="results.tsv")
+
+# Without export_tsv nothing is written — the API returns the frame.
+# (The CLI is the opposite: it defaults to results_PEGA/.)
+
+# What is installed and working right now
+for p in pega.list_predictors(available_only=True):
+    print(p["predictor_id"], p["name"], p["category"])
 ```
 
 ---

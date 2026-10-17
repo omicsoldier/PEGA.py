@@ -39,7 +39,9 @@ def score(
         to the output DataFrame. If ``False``, only individual predictor
         scores are returned.
     export_tsv:
-        Optional file path. When provided, results are written as TSV.
+        Where to write results as TSV. When omitted nothing is written
+        and the DataFrame is simply returned — unlike ``PEGA score`` on
+        the command line, which defaults to ``results_PEGA/``.
 
     Returns
     -------
@@ -54,6 +56,9 @@ def score(
         predictor_names=predictors,
         ensemble_names=None if ensemble else [],
         export_tsv=export_tsv,
+        # A library call should hand back data, not write files nobody
+        # asked for; calculate_scores on its own defaults to results_PEGA.
+        _no_export=export_tsv is None,
     )
 
 

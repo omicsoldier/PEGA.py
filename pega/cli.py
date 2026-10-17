@@ -215,7 +215,7 @@ def cmd_score(args: argparse.Namespace) -> int:
         ]
 
     try:
-        df = calculate_scores(
+        calculate_scores(
             fasta_path=fasta,
             predictor_names=predictors,
             export_tsv=args.out,

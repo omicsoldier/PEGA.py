@@ -361,9 +361,12 @@ def screen_sequences(
         seqs_left  = max(0, total_in_file - seqs_done)
         eta_s      = avg_time * (seqs_left / max(chunk_size, 1))
 
-        if   eta_s < 60:    eta_str = f"{eta_s:.0f}s"
-        elif eta_s < 3600:  eta_str = f"{eta_s/60:.1f}min"
-        else:                eta_str = f"{eta_s/3600:.1f}h"
+        if eta_s < 60:
+            eta_str = f"{eta_s:.0f}s"
+        elif eta_s < 3600:
+            eta_str = f"{eta_s / 60:.1f}min"
+        else:
+            eta_str = f"{eta_s / 3600:.1f}h"
 
         pct = 100 * seqs_done / total_in_file
         print(
@@ -405,7 +408,52 @@ def calculate_scores(
     _skip_prepare: bool = False,
     _no_export: bool = False,
 ) -> pd.DataFrame:
-    """Score all sequences in a FASTA file using available AMP predictors."""
+    """Score every sequence in a FASTA file with the available predictors.
+
+    Parameters
+    ----------
+    fasta_path : str or Path
+        Input FASTA. Headers are replaced with generated ids while
+        scoring and restored as ``original_header`` in the result.
+    predictor_names : list[str] or None
+        Names (as in ``PEGA list``) to run. ``None`` runs every available
+        predictor, except that naming ``ensemble_names`` without this
+        narrows the set to the predictors those ensembles need.
+    export_tsv : str or Path or None
+        Where to write the TSV. ``None`` writes
+        ``results_PEGA/PEGA_results_<timestamp>.tsv``. An explicit path is
+        used verbatim and its parent directories are created. Scores are
+        rounded to 5 decimals on write; the returned frame keeps full
+        precision.
+    jobs : int
+        Predictors to run concurrently. ``-1`` uses 75% of the CPU
+        threads. ``1`` runs them one at a time.
+    validate : bool
+        Check the FASTA first and abort on invalid input.
+    quiet : bool
+        Suppress the header block. Progress and the save line still print.
+    ensemble_names : list[str] or None
+        Ensembles to compute. ``None`` computes all of them; an empty
+        list computes none — the two are *not* interchangeable. Unknown
+        names warn rather than raise.
+    no_individual_scores : bool
+        Keep only identifier and ``ensemble_*`` columns in the output.
+        Liability columns are individual scores and are dropped too.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per sequence: identifiers, activity scores, ensemble
+        scores, then the liability columns (haemolysis, toxicity,
+        allergenicity), which run higher-is-worse.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``fasta_path`` does not exist.
+    RuntimeError
+        If every predictor fails.
+    """
     fasta_path = Path(fasta_path)
     if not fasta_path.exists():
         raise FileNotFoundError(f"FASTA file not found: {fasta_path}")
@@ -421,7 +469,13 @@ def calculate_scores(
               f"(len: {stats['min_len']}–{stats['max_len']}, avg {stats['avg_len']})")
         print(f"  Predictors : {predictor_label}")
         print(f"  Jobs       : {jobs}")
-        out_label = export_tsv or f"{_DEFAULT_RESULTS_DIR}/PEGA_results_<timestamp>.tsv"
+        if _no_export:
+            out_label = "none (DataFrame returned)"
+        else:
+            out_label = (
+                export_tsv
+                or f"{_DEFAULT_RESULTS_DIR}/PEGA_results_<timestamp>.tsv"
+            )
         print(f"  Output     : {out_label}")
         ok, status_msg = validate_fasta(fasta_path, verbose=False)
         print(f"  Status     : {status_msg}")

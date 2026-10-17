@@ -99,9 +99,11 @@ def uniform_crossover(parent1: str, parent2: str) -> tuple[str, str]:
     c1, c2 = [], []
     for a, b in zip(parent1, parent2):
         if random.random() < 0.5:
-            c1.append(a); c2.append(b)
+            c1.append(a)
+            c2.append(b)
         else:
-            c1.append(b); c2.append(a)
+            c1.append(b)
+            c2.append(a)
     return "".join(c1), "".join(c2)
 
 
