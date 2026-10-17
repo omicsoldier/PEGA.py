@@ -47,6 +47,10 @@ _ENVIRONMENTS = {
         "yml": _ENVS_DIR / "amplify_env.yml",
         "description": "AMPlify predictor environment (bioconda)",
         "check_cmd": ["AMPlify", "--help"],
+        # The yml only provides the Python 3.6 interpreter; conda cannot
+        # resolve AMPlify's own dependency tree.
+        "note": "AMPlify itself still needs: mamba install -n amplify_env "
+                "bioconda::amplify",
     },
     "hemo_env": {
         "yml": _ENVS_DIR / "hemo_env.yml",
@@ -62,6 +66,10 @@ _ENVIRONMENTS = {
         "yml": _ENVS_DIR / "toxipep_env.yml",
         "description": "ToxiPep toxicity predictor environment (pip)",
         "check_cmd": ["python", "-c", "import torch, rdkit"],
+        # ToxiPep has no licence file upstream, so it is cloned rather
+        # than vendored or pip-installed.
+        "note": "ToxiPep itself still needs: bash setup_environments.sh "
+                "toxipep (clones it into third_party/)",
     },
 }
 
@@ -178,8 +186,7 @@ def create_environment(name: str, force: bool = False) -> bool:
     Parameters
     ----------
     name:
-        Environment name — one of ``pega_env``, ``macrel_env``,
-        ``amplify_env``.
+        Environment name — any key of :data:`_ENVIRONMENTS`.
     force:
         If ``True``, remove and recreate the environment if it already
         exists.
@@ -222,6 +229,9 @@ def create_environment(name: str, force: bool = False) -> bool:
         return False
 
     print(f"  {name} created successfully.")
+    note = info.get("note")
+    if note:
+        print(f"  Note: {note}")
     return True
 
 

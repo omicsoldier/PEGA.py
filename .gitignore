@@ -56,3 +56,6 @@ merci_output.csv
 merci_hybrid.csv
 blast_hybrid.csv
 RES_*.out
+
+# ToxiPep clone (no licence file upstream, so not vendored)
+third_party/

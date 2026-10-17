@@ -162,8 +162,13 @@ create_amplify_env() {
     info "Step 1/2: Creating Python 3.6 base environment ..."
     conda create -n amplify_env python=3.6 -y
 
+    # NOT "conda activate amplify_env && mamba install ...": conda
+    # activate is a shell function that only exists after conda's shell
+    # hook is sourced, so in a script it fails with CommandNotFoundError
+    # and the && short-circuits — mamba never runs and AMPlify is never
+    # installed. mamba takes -n directly.
     info "Step 2/2: Installing AMPlify via mamba (bioconda::amplify) ..."
-    conda activate amplify_env && mamba install bioconda::amplify -y
+    mamba install -n amplify_env -y bioconda::amplify
 
     # Quick smoke test
     if conda run -n amplify_env AMPlify --help &>/dev/null; then
@@ -234,18 +239,34 @@ create_toxipep_env() {
     echo "── toxipep_env ───────────────────────────"
     if env_exists "toxipep_env"; then
         ok "toxipep_env already exists — skipping."
-        return 0
+    else
+        info "Creating toxipep_env from envs/toxipep_env.yml ..."
+        conda env create -f "${ENVS_DIR}/toxipep_env.yml"
+        ok "toxipep_env created."
     fi
-    info "Creating toxipep_env from envs/toxipep_env.yml ..."
-    conda env create -f "${ENVS_DIR}/toxipep_env.yml"
-    ok "toxipep_env created."
 
-    # ToxiPep itself is not installed here: its repo has no licence file,
-    # so PEGA calls a clone you provide instead of redistributing it.
-    echo ""
-    info "ToxiPep code is NOT installed by this script. To enable it:"
-    echo "       git clone https://github.com/GGCL7/ToxiPep"
-    echo "       export PEGA_TOXIPEP_DIR=/path/to/ToxiPep/Code"
+    # ToxiPep is cloned, not vendored: its repository carries no licence
+    # file, so redistributing its code and weights inside this MIT project
+    # would be unlicensed. third_party/ is gitignored.
+    local tp_dir="${SCRIPT_DIR}/third_party/ToxiPep"
+    if [[ -f "${tp_dir}/Code/best_model_0.9.pth" ]]; then
+        ok "ToxiPep already cloned at third_party/ToxiPep — skipping."
+    else
+        info "Cloning ToxiPep into third_party/ToxiPep ..."
+        mkdir -p "${SCRIPT_DIR}/third_party"
+        if git clone --depth 1 https://github.com/GGCL7/ToxiPep "${tp_dir}"; then
+            ok "ToxiPep cloned."
+        else
+            fail "Could not clone ToxiPep — the predictor will report itself unavailable."
+            return 0
+        fi
+    fi
+
+    if conda run -n toxipep_env python -c "import torch, rdkit" &>/dev/null; then
+        ok "ToxiPep is functional."
+    else
+        fail "toxipep_env created but 'import torch, rdkit' failed — check the environment."
+    fi
 }
 
 # ---------------------------------------------------------------------------

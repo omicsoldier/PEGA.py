@@ -9,17 +9,17 @@ ensemble consumes it. It complements ToxinPred3 rather than replacing it
 (melittin, mastoparan, protegrin-1, polyphemusin-1, apamin, conotoxin GI)
 above 0.75 and the five realistic inert peptides below 0.38.
 
-Not vendored
-------------
+Not vendored, but set up for you
+-------------------------------
 ToxiPep's repository carries no licence file, so by default all rights
-are reserved and its code and weights cannot be redistributed here. PEGA
-therefore calls a clone you provide::
+are reserved and its code and weights cannot be redistributed inside this
+MIT project. Nothing is asked of you either: ``setup_environments.sh
+toxipep`` clones it into ``third_party/ToxiPep`` (gitignored) and this
+predictor looks there automatically.
 
-    git clone https://github.com/GGCL7/ToxiPep
-    export PEGA_TOXIPEP_DIR=/path/to/ToxiPep/Code
-
-``PEGA_TOXIPEP_DIR`` must hold ``predict.py`` and ``best_model_0.9.pth``.
-Without it this predictor simply reports itself unavailable.
+Set ``PEGA_TOXIPEP_DIR`` only to point at a clone kept somewhere else; it
+overrides the default location. With neither present the predictor simply
+reports itself unavailable and the rest of PEGA runs normally.
 
 The reported number is not the toxicity probability
 ---------------------------------------------------
@@ -81,14 +81,28 @@ runpy.run_path("predict.py", run_name="__main__")
 """
 
 
+#: Where ``setup_environments.sh toxipep`` clones ToxiPep. Kept inside the
+#: repository (and gitignored) rather than vendored, so no unlicensed code
+#: is redistributed, while still needing nothing from the user.
+_VENDOR_DIR = Path(__file__).resolve().parents[2] / "third_party" / "ToxiPep" / "Code"
+
+
+def _usable(path: Path) -> bool:
+    return (path / "predict.py").is_file() and (path / "best_model_0.9.pth").is_file()
+
+
 def _toxipep_dir() -> Path | None:
-    """Return the configured ToxiPep checkout, or None if unusable."""
+    """Return a usable ToxiPep checkout, or None if there is none.
+
+    Checks ``PEGA_TOXIPEP_DIR`` first so an existing clone elsewhere still
+    works, then the location the setup script clones into.
+    """
     raw = os.environ.get(_DIR_VAR)
-    if not raw:
-        return None
-    path = Path(raw).expanduser()
-    if (path / "predict.py").is_file() and (path / "best_model_0.9.pth").is_file():
-        return path
+    if raw:
+        path = Path(raw).expanduser()
+        return path if _usable(path) else None
+    if _usable(_VENDOR_DIR):
+        return _VENDOR_DIR
     return None
 
 
@@ -116,8 +130,8 @@ class ToxiPepPredictor(BasePredictor):
     @classmethod
     def is_available(cls) -> bool:
         # The checkout lookup stays uncached: unlike a conda environment,
-        # PEGA_TOXIPEP_DIR can be set after this is first called, and a
-        # cached False would then never recover.
+        # the clone can appear (or PEGA_TOXIPEP_DIR be set) after this is
+        # first called, and a cached False would then never recover.
         return _toxipep_dir() is not None and cls._env_ready()
 
     def score(self, fasta_path: str | Path) -> pd.DataFrame:
@@ -133,9 +147,10 @@ class ToxiPepPredictor(BasePredictor):
         checkout = _toxipep_dir()
         if checkout is None:
             raise RuntimeError(
-                f"{_DIR_VAR} is not set to a usable ToxiPep checkout.\n"
-                "git clone https://github.com/GGCL7/ToxiPep && "
-                f"export {_DIR_VAR}=/path/to/ToxiPep/Code"
+                "No usable ToxiPep checkout found.\n"
+                f"Expected it at {_VENDOR_DIR}, which "
+                "'bash setup_environments.sh toxipep' creates, or set "
+                f"{_DIR_VAR} to a clone elsewhere."
             )
 
         names = [

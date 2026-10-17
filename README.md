@@ -106,6 +106,22 @@ out-of-fold, not the in-sample figure.
 - mamba (recommended)
 - git with Git LFS
 
+### Quick path
+
+```bash
+git clone https://github.com/omicsoldier/PEGA.py.git
+cd PEGA.py
+bash setup_environments.sh          # creates all six environments
+conda activate pega_env
+pip install -e .
+PEGA list
+```
+
+`setup_environments.sh` takes `pega`, `macrel`, `amplify`, `hemo`, `tox`,
+`toxipep` or `--status` to work on one environment at a time. The steps
+below are the same thing done by hand, with the reasoning behind each
+pin.
+
 ### Step 1 — Clone
 
 ```bash
@@ -113,10 +129,14 @@ git clone https://github.com/omicsoldier/PEGA.py.git
 cd PEGA.py
 ```
 
-> Model weights (~106 MB) are stored via Git LFS. If `git-lfs` isn't
-> installed when you clone, you'll silently get small placeholder files
-> instead of the real weights — run `PEGA download-models` (Step 2 below)
-> to fix this regardless of whether LFS worked.
+> Model weights (~106 MB) are stored via Git LFS. **Install `git-lfs`
+> before cloning** — without it you silently get small pointer files
+> instead of the real weights, and the bundled predictors fail at load
+> time. If you already cloned without it: `git lfs install && git lfs pull`.
+>
+> `PEGA download-models` exists as a fallback but does not currently
+> work: it fetches from a GitHub release (`v0.1.0-models`) that has not
+> been published. Git LFS is the supported path.
 
 > **Remote machines / SSH nodes**: the installation procedure is identical —
 > run all steps on the target node after connecting via SSH.
@@ -128,15 +148,13 @@ cd PEGA.py
 conda env create -f envs/pega_env.yml
 conda activate pega_env
 pip install -e .
-PEGA download-models
 PEGA --version
 PEGA list
 ```
 
-> `PEGA download-models` always verifies the model files, even if
-> `git clone` already ran — it detects and replaces Git LFS pointer stubs
-> automatically, so this step is safe (and a no-op) whether or not LFS
-> worked during cloning.
+> If `PEGA list` shows the bundled predictors (AMPnet, AMP_CG, amPEPpy,
+> modlAMP) as unavailable, the Git LFS weights did not come down — see
+> the note in Step 1.
 
 > The yml pins **Python 3.10** — required for TensorFlow and modlAMP
 > compatibility. Do not change this to 3.11/3.12.
@@ -213,10 +231,12 @@ conda env create -f envs/macrel_env.yml
 **AMPlify** (predictors 7 & 8) — requires Python 3.6, use mamba:
 ```bash
 conda create -n amplify_env python=3.6 -y
-conda activate amplify_env
-mamba install bioconda::amplify
-conda deactivate
+mamba install -n amplify_env bioconda::amplify
 ```
+
+> mamba is required: conda cannot resolve AMPlify's Python 3.6
+> dependency tree. Note `-n` rather than `conda activate` — activation
+> is a shell function that does not exist inside a script.
 
 **HemoPI2** (predictor 11, haemolysis):
 ```bash
@@ -261,18 +281,18 @@ conda env create -f envs/tox_env.yml
 > defaults to `-m 2`, the MERCI hybrid, which scores melittin 0.32 and
 > calls bee venom non-toxic.
 
-**ToxiPep** (predictor 13, toxicity) — optional:
+**ToxiPep** (predictor 13, toxicity):
 ```bash
-conda env create -f envs/toxipep_env.yml
-git clone https://github.com/GGCL7/ToxiPep
-export PEGA_TOXIPEP_DIR=/path/to/ToxiPep/Code
+bash setup_environments.sh toxipep
 ```
 
-> ToxiPep is **not bundled with PEGA**. Its repository carries no licence
+> ToxiPep is **cloned, not bundled**. Its repository carries no licence
 > file, so by default all rights are reserved and redistributing its code
-> or weights here would be unlicensed — you clone it yourself and PEGA
-> calls your copy. Without `PEGA_TOXIPEP_DIR` the predictor reports
-> itself unavailable and the rest of PEGA runs normally.
+> or weights inside this MIT project would be unlicensed. The command
+> above clones it into `third_party/ToxiPep` (gitignored) and PEGA finds
+> it there — nothing to export. Set `PEGA_TOXIPEP_DIR` only to point at a
+> clone kept elsewhere. With neither present the predictor reports itself
+> unavailable and the rest of PEGA runs normally.
 >
 > PEGA does not modify the checkout. Two upstream quirks are handled at
 > call time: `predict.py` loads CUDA-saved weights with no
@@ -451,7 +471,10 @@ PEGA/
 ├── envs/
 │   ├── pega_env.yml          # main environment
 │   ├── macrel_env.yml        # Macrel predictor
-│   └── amplify_env.yml       # AMPlify predictor
+│   ├── amplify_env.yml       # AMPlify (Python 3.6 base only)
+│   ├── hemo_env.yml          # HemoPI2 (RF + ESM2)
+│   ├── tox_env.yml           # ToxinPred3 + AlgPred2
+│   └── toxipep_env.yml       # ToxiPep
 ├── pega/
 │   ├── predictors/           # one module per predictor
 │   ├── operators/            # GA crossover, mutation, selection
