@@ -20,7 +20,6 @@ from __future__ import annotations
 import warnings
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from Bio import SeqIO
 from tqdm import tqdm

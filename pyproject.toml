@@ -10,7 +10,7 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
 authors = [
-  { name = "fcabezasmera", email = "your@email.com" }
+  { name = "omicsoldier", email = "your@email.com" }
 ]
 keywords = [
   "antimicrobial peptides", "AMP", "bioinformatics",
@@ -51,9 +51,9 @@ all = ["PEGA.py[deep]", "PEGA.py[modlamp]"]
 dev = ["pytest>=7.0", "pytest-cov", "ruff"]
 
 [project.urls]
-Homepage = "https://github.com/fcabezasmera/PEGA"
-Repository = "https://github.com/fcabezasmera/PEGA"
-"Bug Tracker" = "https://github.com/fcabezasmera/PEGA/issues"
+Homepage = "https://github.com/omicsoldier/PEGA.py"
+Repository = "https://github.com/omicsoldier/PEGA.py"
+"Bug Tracker" = "https://github.com/omicsoldier/PEGA.py/issues"
 
 [project.scripts]
 PEGA = "pega.cli:main"

@@ -30,8 +30,8 @@ from tqdm import tqdm
 # Configure before publishing
 # ---------------------------------------------------------------------------
 
-_GITHUB_USER = "fcabezasmera"
-_GITHUB_REPO = "PEGA"
+_GITHUB_USER = "omicsoldier"
+_GITHUB_REPO = "PEGA.py"
 _RELEASE_TAG = "v0.1.0-models"
 
 _MODELS = [

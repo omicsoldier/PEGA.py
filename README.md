@@ -16,8 +16,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/)
-[![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/fcabezasmera/PEGA)
-[![Predictors](https://img.shields.io/badge/predictors-10-teal.svg)](https://github.com/fcabezasmera/PEGA)
+[![Status](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/omicsoldier/PEGA.py)
+[![Predictors](https://img.shields.io/badge/predictors-10-teal.svg)](https://github.com/omicsoldier/PEGA.py)
 
 *Multi-predictor ensemble scoring for antimicrobial peptide research*
 
@@ -48,6 +48,15 @@ saved automatically as TSV files. It supports datasets from a few sequences up t
 | 8 | AMPlify (imbalanced) | Attentive deep learning | `amplify_env` |
 | 9 | modlAMP RF | Random Forest (PepCATS) | `pega_env` |
 | 10 | modlAMP SVM | SVM (PepCATS) | `pega_env` |
+| 11 | HemoPI2 (RF) | Random Forest — **haemolysis**, not activity | `hemo_env` |
+| 12 | ToxinPred3 (ET) | Extra Trees — **toxicity**, not activity | `tox_env` |
+| 13 | ToxiPep | BiGRU/Transformer + atomic graph — **toxicity** | `toxipep_env` + checkout |
+| 14 | AlgPred2 | **Allergenicity**, not activity | `tox_env` |
+| 15 | HemoPI2 (ESM2) | ESM2-t6 — **haemolysis**, not activity | `hemo_env` |
+
+Predictors 1–10 score antimicrobial activity. Predictors 11–15 score
+different endpoints — liabilities rather than activity — and are
+described under [Output](#liability-columns).
 
 ## Validated Ensembles
 
@@ -94,20 +103,64 @@ out-of-fold, not the in-sample figure.
 
 - Linux 64-bit
 - Miniconda or Anaconda
-- mamba (recommended)
-- git with Git LFS
+- **mamba** — required, not optional: conda cannot resolve AMPlify's
+  Python 3.6 dependency tree. `conda install -n base -c conda-forge mamba`
+- **git-lfs**, installed *before* cloning — the model weights come through
+  Git LFS
+- R ≥ 4.5 — installed into `pega_env` by its yml, no system R needed
+
+### What gets installed
+
+PEGA runs 15 predictors across 6 conda environments. Each external tool
+is pinned in its own environment because their dependencies genuinely
+conflict — the notes under each step explain why.
+
+| Environment | Predictors | Why separate |
+|-------------|-----------|--------------|
+| `pega_env` | 1–5, 9, 10 (AMPnet, amPEPpy, ampir ×2, AMP_CG, modlAMP ×2) | Main environment; also hosts the R/ampir install |
+| `macrel_env` | 6 (Macrel + its haemolysis score) | bioconda package, pinned sklearn/numpy/scipy |
+| `amplify_env` | 7, 8 (AMPlify balanced/imbalanced) | Needs Python 3.6 |
+| `hemo_env` | 11, 15 (HemoPI2 RF and ESM2) | Pins `scikit-learn==1.3.1` |
+| `tox_env` | 12, 14 (ToxinPred3, AlgPred2) | Pins `scikit-learn==1.0.2` + `numpy==1.22.4` |
+| `toxipep_env` | 13 (ToxiPep) | Pins `numpy<2` for rdkit; the tool itself is cloned, not installed |
+
+Predictors 1–10 score antimicrobial **activity**. Predictors 11–15 score
+**liabilities** — haemolysis, toxicity, allergenicity — where a higher
+score is worse. See [Liability columns](#liability-columns).
+
+Everything runs on CPU. No root or sudo is needed at any point.
+
+### Quick path
+
+```bash
+git clone https://github.com/omicsoldier/PEGA.py.git
+cd PEGA.py
+bash setup_environments.sh          # creates all six environments
+conda activate pega_env
+pip install -e .
+PEGA list
+```
+
+`setup_environments.sh` takes `pega`, `macrel`, `amplify`, `hemo`, `tox`,
+`toxipep` or `--status` to work on one environment at a time. The steps
+below are the same thing done by hand, with the reasoning behind each
+pin.
 
 ### Step 1 — Clone
 
 ```bash
-git clone https://github.com/fcabezasmera/PEGA.git
-cd PEGA
+git clone https://github.com/omicsoldier/PEGA.py.git
+cd PEGA.py
 ```
 
-> Model weights (~106 MB) are stored via Git LFS. If `git-lfs` isn't
-> installed when you clone, you'll silently get small placeholder files
-> instead of the real weights — run `PEGA download-models` (Step 2 below)
-> to fix this regardless of whether LFS worked.
+> Model weights (~106 MB) are stored via Git LFS. **Install `git-lfs`
+> before cloning** — without it you silently get small pointer files
+> instead of the real weights, and the bundled predictors fail at load
+> time. If you already cloned without it: `git lfs install && git lfs pull`.
+>
+> `PEGA download-models` exists as a fallback but does not currently
+> work: it fetches from a GitHub release (`v0.1.0-models`) that has not
+> been published. Git LFS is the supported path.
 
 > **Remote machines / SSH nodes**: the installation procedure is identical —
 > run all steps on the target node after connecting via SSH.
@@ -119,15 +172,13 @@ cd PEGA
 conda env create -f envs/pega_env.yml
 conda activate pega_env
 pip install -e .
-PEGA download-models
 PEGA --version
 PEGA list
 ```
 
-> `PEGA download-models` always verifies the model files, even if
-> `git clone` already ran — it detects and replaces Git LFS pointer stubs
-> automatically, so this step is safe (and a no-op) whether or not LFS
-> worked during cloning.
+> If `PEGA list` shows the bundled predictors (AMPnet, AMP_CG, amPEPpy,
+> modlAMP) as unavailable, the Git LFS weights did not come down — see
+> the note in Step 1.
 
 > The yml pins **Python 3.10** — required for TensorFlow and modlAMP
 > compatibility. Do not change this to 3.11/3.12.
@@ -204,10 +255,80 @@ conda env create -f envs/macrel_env.yml
 **AMPlify** (predictors 7 & 8) — requires Python 3.6, use mamba:
 ```bash
 conda create -n amplify_env python=3.6 -y
-conda activate amplify_env
-mamba install bioconda::amplify
-conda deactivate
+mamba install -n amplify_env bioconda::amplify
 ```
+
+> mamba is required: conda cannot resolve AMPlify's Python 3.6
+> dependency tree. Note `-n` rather than `conda activate` — activation
+> is a shell function that does not exist inside a script.
+
+**HemoPI2** (predictor 11, haemolysis):
+```bash
+conda env create -f envs/hemo_env.yml
+```
+
+> This needs its own environment and cannot go in `pega_env`. HemoPI2
+> pins `scikit-learn==1.3.1`, which forces `numpy<2`; installing it
+> alongside `pega_env`'s pinned `numpy=2.2` downgrades numpy and breaks
+> the TensorFlow/PyTorch stack built on it.
+>
+> Verify with a known haemolytic peptide — melittin should score high
+> and a polyanionic control low:
+> ```bash
+> printf '>melittin\nGIGAVLKVLTTGLPALISWIKRKRQQ\n>neg\nEEEEEEDDDDDDEEEEEEDDDDDD\n' > _hemo.fasta
+> conda run -n hemo_env hemopi2_classification -i _hemo.fasta -m 1 -j 1 -wd . -o _hemo.csv
+> cat _hemo.csv && rm -f _hemo.fasta _hemo.csv
+> ```
+> Expected: melittin ≈ 0.97 (`Hemolytic`), the negative ≈ 0.40
+> (`Non-Hemolytic`). If melittin comes out low, the environment has
+> drifted — recreate it from the pinned yml.
+
+**ToxinPred3** (predictor 12, toxicity):
+```bash
+conda env create -f envs/tox_env.yml
+```
+
+> A third environment, for a hard reason rather than tidiness.
+> ToxinPred3's models are pickles fitted under `scikit-learn 1.0.2`, and
+> the tree node struct changed in 1.3, so loading them under anything
+> newer fails with `node array from the pickle has an incompatible
+> dtype`. That rules out `pega_env` (`>=1.3`) *and* `hemo_env`
+> (`==1.3.1`).
+>
+> Verify:
+> ```bash
+> printf '>melittin\nGIGAVLKVLTTGLPALISWIKRKRQQ\n>polyG\nGGGGGGGGGGGGGGGGGGGG\n' > _tox.fasta
+> conda run -n tox_env toxinpred3 -i _tox.fasta -m 1 -o _tox.csv
+> cat _tox.csv && rm -f _tox.fasta _tox.csv Sequence_1
+> ```
+> Expected: melittin ≈ 0.82, polyG ≈ 0.17. Note `-m 1`: ToxinPred3
+> defaults to `-m 2`, the MERCI hybrid, which scores melittin 0.32 and
+> calls bee venom non-toxic.
+
+**ToxiPep** (predictor 13, toxicity):
+```bash
+bash setup_environments.sh toxipep
+```
+
+> ToxiPep is **cloned, not bundled**. Its repository carries no licence
+> file, so by default all rights are reserved and redistributing its code
+> or weights inside this MIT project would be unlicensed. The command
+> above clones it into `third_party/ToxiPep` (gitignored) and PEGA finds
+> it there — nothing to export. Set `PEGA_TOXIPEP_DIR` only to point at a
+> clone kept elsewhere. With neither present the predictor reports itself
+> unavailable and the rest of PEGA runs normally.
+>
+> PEGA does not modify the checkout. Two upstream quirks are handled at
+> call time: `predict.py` loads CUDA-saved weights with no
+> `map_location`, so PEGA runs it through a wrapper that defaults to CPU;
+> and its third output column is the model's confidence in whichever
+> class it picked, not P(toxic), so PEGA inverts it using the label
+> column. Read that file directly and non-toxic peptides look like the
+> most toxic ones — LL-37 writes 0.990 for a *non-toxic* call.
+>
+> `envs/toxipep_env.yml` also departs from ToxiPep's `requirements.txt`,
+> which pins `torch_geometric`, `torch_sparse`, `torch-scatter`,
+> `selenium` and `shap`. None are imported by the prediction path.
 
 ---
 
@@ -246,19 +367,25 @@ PEGA screen --fasta large.fasta \
 ### `PEGA score` → single TSV
 
 ```
-PEGA_results_YYYYMMDD_HHMMSS.tsv
+results_PEGA/PEGA_results_YYYYMMDD_HHMMSS.tsv
 ```
 
-Columns: `seq_name` | `original_header` | scores | ensemble scores
+Columns: `seq_name` | `original_header` | activity scores | ensemble scores | liability scores
+
+Written to `results_PEGA/` unless `--out` names another path. Scores are
+rounded to 5 decimals in the file; the DataFrame returned by the Python
+API keeps full precision. An explicit
+`--out` is used exactly as given, and its parent directories are created
+if missing.
 
 ### `PEGA screen` → folder with 3 files
 
 ```
-PEGA_screen_YYYYMMDD_HHMMSS/
+results_PEGA/PEGA_screen_YYYYMMDD_HHMMSS/
 ├── names.tsv       # pep_id | original_header | length
 ├── rejected.tsv    # original_header | length | reason
 ├── rejected.fasta  # FASTA of rejected sequences
-└── scores.tsv      # pep_id | scores | ensemble scores
+└── scores.tsv      # pep_id | activity scores | ensemble scores | liability scores
 ```
 
 Join scores ↔ names on `pep_id`:
@@ -270,7 +397,76 @@ scores = pd.read_csv("PEGA_screen_*/scores.tsv", sep="\t")
 df     = scores.merge(names, on="pep_id")
 ```
 
-All scores are probabilities in `[0, 1]`. Higher = more likely antimicrobial.
+All scores are probabilities in `[0, 1]`. Higher = more likely antimicrobial
+— except for the three liability columns.
+
+<a id="liability-columns"></a>
+### Liability columns — higher is *worse*
+
+Three columns score a risk rather than antimicrobial activity. They are
+triage flags, to help you drop promising-but-risky candidates.
+
+| Column | Endpoint | Source |
+|--------|----------|--------|
+| `hemolysis_macrel_score` | Lyses red blood cells | Macrel's `Hemolytic_probability` — free, Macrel already runs |
+| `hemopi2_score` | Lyses red blood cells | HemoPI2 Random Forest (`hemo_env`), AUC 0.888 |
+| `hemopi2_esm_score` | Lyses red blood cells | HemoPI2 ESM2-t6 (`hemo_env`), AUC 0.919 |
+| `toxinpred3_score` | Is a toxin | ToxinPred3 Extra Trees (`tox_env`) |
+| `toxipep_score` | Is a toxin | ToxiPep (`toxipep_env` + your own checkout) |
+| `algpred2_score` | Provokes an allergic response | AlgPred 2.0 (`tox_env`, shared with ToxinPred3) |
+
+**None is consumed by any ensemble**, and all are dropped by
+`--no-individual-scores`, which keeps only `ensemble_*` columns. They sit
+at the end of the table, after the ensembles, so the activity columns
+read as one block.
+
+**Haemolysis and toxicity are not interchangeable**, which is why they
+are separate columns. Haemolysis is one specific mechanism — erythrocyte
+lysis. ToxinPred3 asks a broader and differently-framed question: does
+this look like a *toxin*, as found in venoms and bacterial toxins? The
+two disagree on real peptides. Magainin2, a benign frog AMP, scores 0.72
+on HemoPI2 but 1.00 on ToxinPred3; melittin, actual bee venom, scores
+0.97 and 0.82. A high `toxinpred3_score` on a designed AMP is common and
+is not on its own a safety finding — many membrane-active AMPs sit in
+ToxinPred's positive set. Read the columns together, not as substitutes.
+
+`algpred2_score` needs reading with care: AlgPred 2.0 was trained on
+allergenic *proteins*, and on a 25-peptide panel its scores spanned only
+0.27–0.43, a narrow band around its own 0.3 cutoff. Treat it as a flag to
+follow up, not a verdict.
+
+Caveats on `hemopi2_score`: HemoPI2 truncates sequences longer than 40
+residues to their first 40 before scoring, and its own cutoff is 0.46,
+not 0.5. ToxinPred3's cutoff is 0.38. ToxiPep rejects sequences longer
+than 50 residues outright rather than truncating.
+
+On a 25-peptide control panel — six known toxins (melittin, mastoparan,
+protegrin-1, polyphemusin-1, apamin, conotoxin GI) against realistic
+inert peptides — ToxiPep separated the two groups completely (toxins all
+above 0.75, inert all below 0.38). Both it and HemoPI2's ESM2 model do,
+however, score low-complexity homopolymers as toxic/haemolytic, which is
+worth knowing when evolving sequences with a GA.
+
+Why these and not the others: most published haemolysis and toxicity
+predictors are web servers with no installable code (HemoPred, HAPPENN,
+HLPpred-Fuse), and several have code or services that no longer run —
+the HemoPI2 authors report being unable to evaluate HLPpred-Fuse,
+HemoNet, hemolytic-Pred or Capecchi's RNN for exactly that reason. A web
+server is also unusable here: no batching, no offline reproducibility.
+
+HemoPI2 is reported through **two** models, Random Forest and ESM2-t6,
+rather than one. They agree only moderately (Spearman 0.66 over a
+25-peptide panel), so the disagreement is informative. Where they differ
+on low-complexity sequences, trust the RF: ESM2 scored poly-Gly, poly-Ser
+and poly-Ala as haemolytic, and a genetic algorithm produces such
+sequences in quantity.
+
+All three tools ship a MERCI motif "hybrid" model that PEGA does not use. The
+hybrid adds a motif term to the ML score, and a non-match subtracts
+enough to floor the result: on HemoPI2 every test peptide collapsed to
+exactly 0.0, melittin included, and on ToxinPred3 melittin drops from
+0.82 to 0.32 and is relabelled non-toxic. That destroys the ranking a
+screen depends on, so PEGA uses the plain ML models.
 
 ---
 
@@ -288,6 +484,13 @@ df = pega.score("sequences.fasta",
 
 # Score and export
 df = pega.score("sequences.fasta", export_tsv="results.tsv")
+
+# Without export_tsv nothing is written — the API returns the frame.
+# (The CLI is the opposite: it defaults to results_PEGA/.)
+
+# What is installed and working right now
+for p in pega.list_predictors(available_only=True):
+    print(p["predictor_id"], p["name"], p["category"])
 ```
 
 ---
@@ -299,7 +502,10 @@ PEGA/
 ├── envs/
 │   ├── pega_env.yml          # main environment
 │   ├── macrel_env.yml        # Macrel predictor
-│   └── amplify_env.yml       # AMPlify predictor
+│   ├── amplify_env.yml       # AMPlify (Python 3.6 base only)
+│   ├── hemo_env.yml          # HemoPI2 (RF + ESM2)
+│   ├── tox_env.yml           # ToxinPred3 + AlgPred2
+│   └── toxipep_env.yml       # ToxiPep
 ├── pega/
 │   ├── predictors/           # one module per predictor
 │   ├── operators/            # GA crossover, mutation, selection
@@ -319,10 +525,10 @@ PEGA/
 
 ```bibtex
 @software{pega2025,
-  author = {fcabezasmera},
+  author = {omicsoldier},
   title  = {PEGA.py: Peptide Evolution via Genetic Algorithm},
   year   = {2025},
-  url    = {https://github.com/fcabezasmera/PEGA}
+  url    = {https://github.com/omicsoldier/PEGA.py}
 }
 ```
 

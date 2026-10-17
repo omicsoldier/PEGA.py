@@ -1,0 +1,32 @@
+name: toxipep_env
+channels:
+  - conda-forge
+  - nodefaults
+
+# ToxiPep toxicity predictor.
+#
+# ToxiPep is NOT vendored into this repository: its GitHub repo carries no
+# licence file, so by default all rights are reserved and redistributing
+# its code or weights here would be unlicensed. You clone it yourself and
+# point PEGA at it — see pega/predictors/toxipep.py.
+#
+# requirements.txt in the ToxiPep repo pins torch_geometric, torch_sparse,
+# torch-scatter, selenium, shap and more. None of those are imported by
+# the prediction path (predict.py -> model.py / dataset.py ->
+# atom_feature.py need only torch, numpy, pandas and rdkit), so this
+# environment installs the real dependencies instead of that list.
+
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - torch
+      - pandas
+      # rdkit-pypi's compiled extensions break against numpy 2
+      # ("AttributeError: _ARRAY_API not found"), and ToxiPep pins
+      # numpy 1.24.2 itself.
+      - numpy==1.24.2
+      - rdkit-pypi
+      # predict.py imports sklearn.metrics at module scope even though
+      # prediction never uses it.
+      - scikit-learn

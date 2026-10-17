@@ -86,7 +86,7 @@ def _print_banner() -> None:
             f"  [bold]Peptide Evolution via Genetic Algorithm[/bold]  "
             f"[green]v{version}[/green]"
         )
-        console.print("  [dim]https://github.com/fcabezasmera/PEGA[/dim]\n")
+        console.print("  [dim]https://github.com/omicsoldier/PEGA.py[/dim]\n")
     else:
         console.print(
             f"[bold cyan]PEGA[/bold cyan] [green]v{version}[/green] "
@@ -215,7 +215,7 @@ def cmd_score(args: argparse.Namespace) -> int:
         ]
 
     try:
-        df = calculate_scores(
+        calculate_scores(
             fasta_path=fasta,
             predictor_names=predictors,
             export_tsv=args.out,
@@ -340,7 +340,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--predictors", "-p", nargs="+", metavar="NAME",
                     help="Predictor names (run 'PEGA list' for names). Default: all.")
     sp.add_argument("--out", "-o", metavar="FILE",
-                    help="Output TSV file path. Default: PEGA_results_<timestamp>.tsv")
+                    help="Output TSV file path. Default: results_PEGA/PEGA_results_<timestamp>.tsv")
     sp.add_argument("--jobs", "-j", type=int, default=1, metavar="N",
                     help="Parallel workers. Use -1 for 75%% of available CPU threads. Default: 1 (sequential).")
     sp.add_argument("--ensembles", "-e", nargs="+", metavar="NAME",

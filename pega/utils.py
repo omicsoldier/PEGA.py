@@ -13,7 +13,6 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from rich.console import Console
 
@@ -21,6 +20,36 @@ from pega.registry import registry
 
 _CANONICAL_SET = set("ACDEFGHIKLMNPQRSTVWY")
 _console = Console()
+
+# Liability columns: these score a risk (haemolysis, toxicity) rather than
+# antimicrobial activity, so higher is worse. They are moved to the end of
+# the output so the activity scores and ensembles read as one block. Add
+# new haemolysis or toxicity columns here.
+# Default parent folder for results. Only used when the caller does not
+# name an output path of its own.
+_DEFAULT_RESULTS_DIR = "results_PEGA"
+
+# Liability columns by endpoint, in the order they appear in the output.
+# These score a risk rather than antimicrobial activity, so higher is
+# worse. Add new ones to the group they belong to.
+_LIABILITY_GROUPS: dict[str, tuple[str, ...]] = {
+    "hemolysis": (
+        "hemolysis_macrel_score",
+        "hemopi2_score",
+        "hemopi2_esm_score",
+    ),
+    "toxicity": (
+        "toxinpred3_score",
+        "toxipep_score",
+    ),
+    "allergenicity": (
+        "algpred2_score",
+    ),
+}
+
+_LIABILITY_COLUMNS = tuple(
+    col for cols in _LIABILITY_GROUPS.values() for col in cols
+)
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +228,7 @@ def screen_sequences(
     # ── Output folder ──────────────────────────────────────────────────
     if output_dir is None:
         timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path(f"PEGA_screen_{timestamp}")
+        output_dir = Path(_DEFAULT_RESULTS_DIR) / f"PEGA_screen_{timestamp}"
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -225,7 +254,7 @@ def screen_sequences(
     print(f"  Chunk size: {chunk_size:,} valid sequences")
     print()
 
-    print(f"  Counting sequences ...", end=" ", flush=True)
+    print("  Counting sequences ...", end=" ", flush=True)
     total_in_file = _count_fasta_seqs(fasta_path)
     print(f"{total_in_file:,}")
     print()
@@ -332,9 +361,12 @@ def screen_sequences(
         seqs_left  = max(0, total_in_file - seqs_done)
         eta_s      = avg_time * (seqs_left / max(chunk_size, 1))
 
-        if   eta_s < 60:    eta_str = f"{eta_s:.0f}s"
-        elif eta_s < 3600:  eta_str = f"{eta_s/60:.1f}min"
-        else:                eta_str = f"{eta_s/3600:.1f}h"
+        if eta_s < 60:
+            eta_str = f"{eta_s:.0f}s"
+        elif eta_s < 3600:
+            eta_str = f"{eta_s / 60:.1f}min"
+        else:
+            eta_str = f"{eta_s / 3600:.1f}h"
 
         pct = 100 * seqs_done / total_in_file
         print(
@@ -376,7 +408,52 @@ def calculate_scores(
     _skip_prepare: bool = False,
     _no_export: bool = False,
 ) -> pd.DataFrame:
-    """Score all sequences in a FASTA file using available AMP predictors."""
+    """Score every sequence in a FASTA file with the available predictors.
+
+    Parameters
+    ----------
+    fasta_path : str or Path
+        Input FASTA. Headers are replaced with generated ids while
+        scoring and restored as ``original_header`` in the result.
+    predictor_names : list[str] or None
+        Names (as in ``PEGA list``) to run. ``None`` runs every available
+        predictor, except that naming ``ensemble_names`` without this
+        narrows the set to the predictors those ensembles need.
+    export_tsv : str or Path or None
+        Where to write the TSV. ``None`` writes
+        ``results_PEGA/PEGA_results_<timestamp>.tsv``. An explicit path is
+        used verbatim and its parent directories are created. Scores are
+        rounded to 5 decimals on write; the returned frame keeps full
+        precision.
+    jobs : int
+        Predictors to run concurrently. ``-1`` uses 75% of the CPU
+        threads. ``1`` runs them one at a time.
+    validate : bool
+        Check the FASTA first and abort on invalid input.
+    quiet : bool
+        Suppress the header block. Progress and the save line still print.
+    ensemble_names : list[str] or None
+        Ensembles to compute. ``None`` computes all of them; an empty
+        list computes none — the two are *not* interchangeable. Unknown
+        names warn rather than raise.
+    no_individual_scores : bool
+        Keep only identifier and ``ensemble_*`` columns in the output.
+        Liability columns are individual scores and are dropped too.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per sequence: identifiers, activity scores, ensemble
+        scores, then the liability columns (haemolysis, toxicity,
+        allergenicity), which run higher-is-worse.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``fasta_path`` does not exist.
+    RuntimeError
+        If every predictor fails.
+    """
     fasta_path = Path(fasta_path)
     if not fasta_path.exists():
         raise FileNotFoundError(f"FASTA file not found: {fasta_path}")
@@ -392,7 +469,13 @@ def calculate_scores(
               f"(len: {stats['min_len']}–{stats['max_len']}, avg {stats['avg_len']})")
         print(f"  Predictors : {predictor_label}")
         print(f"  Jobs       : {jobs}")
-        out_label = export_tsv if export_tsv else "PEGA_results_<timestamp>.tsv"
+        if _no_export:
+            out_label = "none (DataFrame returned)"
+        else:
+            out_label = (
+                export_tsv
+                or f"{_DEFAULT_RESULTS_DIR}/PEGA_results_<timestamp>.tsv"
+            )
         print(f"  Output     : {out_label}")
         ok, status_msg = validate_fasta(fasta_path, verbose=False)
         print(f"  Status     : {status_msg}")
@@ -448,6 +531,25 @@ def calculate_scores(
     dfs:    dict[str, pd.DataFrame] = {}
     errors: dict[str, str]          = {}
 
+    # Say how many of these measure a liability rather than activity —
+    # "12 predictors" otherwise reads as 12 activity scores. Announced for
+    # both paths; only the parallel one used to print anything.
+    n_liability = sum(
+        1 for cls in predictor_classes
+        if cls.score_column() in _LIABILITY_COLUMNS
+    )
+    split = (
+        f" ([bold]{total - n_liability}[/bold] activity, "
+        f"[bold]{n_liability}[/bold] liability)" if n_liability else ""
+    )
+    how = (
+        "sequentially" if max_workers == 1
+        else f"with [bold]{max_workers}[/bold] parallel workers"
+    )
+    noun = "predictor" if total == 1 else "predictors"
+    _console.print(f"  Running [bold]{total}[/bold] {noun}{split} {how}...")
+    print()
+
     if max_workers == 1:
         for i, cls in enumerate(predictor_classes, 1):
             _progress(i, total, cls.display_name)
@@ -469,11 +571,6 @@ def calculate_scores(
         _tqdm_module.tqdm.__init__ = _silent_init
         # Prevent joblib/loky conflicts with scikit-learn inside threads
         os.environ["LOKY_MAX_CPU_COUNT"] = "1"
-        _console.print(
-            f"  Running [bold]{total}[/bold] predictors with "
-            f"[bold]{max_workers}[/bold] parallel workers..."
-        )
-        print()
         completed = 0
 
         def _run(cls):
@@ -484,19 +581,27 @@ def calculate_scores(
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {executor.submit(_run, cls): cls
                            for cls in predictor_classes}
+                # Collected rather than printed as each finishes, so the
+                # listing comes out in predictor order instead of fastest
+                # first — matching the sequential path, which follows
+                # predictor_classes (already sorted by predictor_id).
+                finished: dict[str, tuple[str, float | None]] = {}
                 for future in as_completed(futures):
                     cls = futures[future]
                     completed += 1
                     try:
                         name, df, elapsed = future.result()
                         dfs[name] = df
-                        _progress(completed, total,
-                                  f"{cls.display_name} ✓", elapsed)
+                        finished[cls.name] = (f"{cls.display_name} ✓", elapsed)
                     except Exception as exc:
                         errors[cls.display_name] = str(exc)
-                        _progress(completed, total,
-                                  f"{cls.display_name} ✗")
+                        finished[cls.name] = (f"{cls.display_name} ✗", None)
                         print(f"       failed: {exc}", file=sys.stderr)
+
+                for i, cls in enumerate(predictor_classes, 1):
+                    if cls.name in finished:
+                        label, elapsed = finished[cls.name]
+                        _progress(i, total, label, elapsed)
         finally:
             _tqdm_module.tqdm.__init__ = _orig_init
 
@@ -535,6 +640,14 @@ def calculate_scores(
         if valid_ens:
             merged = compute_ensembles(merged, ensemble_names=valid_ens)
 
+    # ── Liability columns last ────────────────────────────────────────
+    liability_cols = [c for c in _LIABILITY_COLUMNS if c in merged.columns]
+    if liability_cols:
+        merged = merged[
+            [c for c in merged.columns if c not in liability_cols]
+            + liability_cols
+        ]
+
     # ── Drop individual scores if requested ───────────────────────────
     if no_individual_scores:
         ens_cols = [c for c in merged.columns if c.startswith("ensemble_")]
@@ -546,13 +659,23 @@ def calculate_scores(
     if not _no_export:
         if export_tsv is None:
             timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
-            export_tsv = f"PEGA_results_{timestamp}.tsv"
+            export_tsv = (
+                Path(_DEFAULT_RESULTS_DIR) / f"PEGA_results_{timestamp}.tsv"
+            )
         out_path = Path(export_tsv)
-        merged.to_csv(out_path, sep="\t", index=False)
-        n_cols = len(merged.columns) - 1
+        # Also covers an explicit --out into a directory that does not
+        # exist yet, which used to fail at write time.
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        # Rounded only on the way out: predictors report 3-5 significant
+        # digits, so full float repr is noise in a file meant to be read.
+        # The returned DataFrame keeps full precision.
+        merged.round(5).to_csv(out_path, sep="\t", index=False)
         _console.print(
-            f"\n  [bold green]Saved[/bold green] → [bold]{out_path}[/bold]  "
-            f"({len(merged)} sequences, {n_cols} columns)"
+            f"\n  [bold green]Saved[/bold green] → [bold]{out_path}[/bold]"
+        )
+        _console.print(
+            f"  [dim]{len(merged)} sequences · "
+            f"{len(merged.columns)} columns[/dim]"
         )
 
     # ── Cleanup ───────────────────────────────────────────────────────

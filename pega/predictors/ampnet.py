@@ -150,8 +150,6 @@ class AMPnetPredictor(BasePredictor):
         seqs   = [str(r.seq).upper() for r in records]
         scores: list[float] = []
 
-        n_batches = max(1, -(-len(seqs) // batch_size))  # ceil division
-
         with tqdm(total=len(seqs), desc="AMPnet", unit="seq") as pbar:
             for i in range(0, len(seqs), batch_size):
                 batch_seqs  = seqs[i : i + batch_size]

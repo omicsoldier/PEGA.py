@@ -51,7 +51,6 @@ Porto, W.F. et al. (2012). Computational design of novel cationic antimicrobial
 from __future__ import annotations
 
 import random
-from typing import Literal
 
 import numpy as np
 

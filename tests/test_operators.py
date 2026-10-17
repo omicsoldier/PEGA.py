@@ -5,7 +5,6 @@ Tests for pega.operators.crossover and pega.operators.mutation.
 Run with: python tests/test_operators.py
 """
 
-import random
 import sys
 from pathlib import Path
 

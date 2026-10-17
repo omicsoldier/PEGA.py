@@ -12,6 +12,9 @@ Environments managed
 pega_env      Main environment — all pip-installable predictors.
 macrel_env    Macrel predictor (bioconda).
 amplify_env   AMPlify predictor (bioconda).
+hemo_env      HemoPI2 haemolysis predictor (pip).
+tox_env       ToxinPred3 toxicity + AlgPred2 allergenicity (pip).
+toxipep_env   ToxiPep toxicity predictor (pip + user checkout).
 
 R / ampir is handled separately since it requires a system R installation.
 """
@@ -44,6 +47,29 @@ _ENVIRONMENTS = {
         "yml": _ENVS_DIR / "amplify_env.yml",
         "description": "AMPlify predictor environment (bioconda)",
         "check_cmd": ["AMPlify", "--help"],
+        # The yml only provides the Python 3.6 interpreter; conda cannot
+        # resolve AMPlify's own dependency tree.
+        "note": "AMPlify itself still needs: mamba install -n amplify_env "
+                "bioconda::amplify",
+    },
+    "hemo_env": {
+        "yml": _ENVS_DIR / "hemo_env.yml",
+        "description": "HemoPI2 haemolysis predictor environment (pip)",
+        "check_cmd": ["hemopi2_classification", "-h"],
+    },
+    "tox_env": {
+        "yml": _ENVS_DIR / "tox_env.yml",
+        "description": "ToxinPred3 + AlgPred2 environment (pip)",
+        "check_cmd": ["toxinpred3", "-h"],
+    },
+    "toxipep_env": {
+        "yml": _ENVS_DIR / "toxipep_env.yml",
+        "description": "ToxiPep toxicity predictor environment (pip)",
+        "check_cmd": ["python", "-c", "import torch, rdkit"],
+        # ToxiPep has no licence file upstream, so it is cloned rather
+        # than vendored or pip-installed.
+        "note": "ToxiPep itself still needs: bash setup_environments.sh "
+                "toxipep (clones it into third_party/)",
     },
 }
 
@@ -160,8 +186,7 @@ def create_environment(name: str, force: bool = False) -> bool:
     Parameters
     ----------
     name:
-        Environment name — one of ``pega_env``, ``macrel_env``,
-        ``amplify_env``.
+        Environment name — any key of :data:`_ENVIRONMENTS`.
     force:
         If ``True``, remove and recreate the environment if it already
         exists.
@@ -204,6 +229,9 @@ def create_environment(name: str, force: bool = False) -> bool:
         return False
 
     print(f"  {name} created successfully.")
+    note = info.get("note")
+    if note:
+        print(f"  Note: {note}")
     return True
 
 

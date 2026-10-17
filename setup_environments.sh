@@ -2,13 +2,16 @@
 # =============================================================================
 # PEGA — Environment Setup Script
 # =============================================================================
-# Creates the three conda environments required by PEGA predictors.
+# Creates the six conda environments required by PEGA predictors.
 #
 # Usage:
 #   bash setup_environments.sh            # create all environments
 #   bash setup_environments.sh macrel     # create only macrel_env
 #   bash setup_environments.sh amplify    # create only amplify_env
 #   bash setup_environments.sh pega       # create only pega_env
+#   bash setup_environments.sh hemo       # create only hemo_env
+#   bash setup_environments.sh tox        # create only tox_env
+#   bash setup_environments.sh toxipep    # create only toxipep_env
 #   bash setup_environments.sh --status   # show environment status
 #
 # After running this script, activate the main environment and install PEGA:
@@ -49,7 +52,7 @@ show_status() {
     echo ""
     echo "PEGA environment status"
     echo "────────────────────────────────────────"
-    for name in pega_env macrel_env amplify_env; do
+    for name in pega_env macrel_env amplify_env hemo_env tox_env toxipep_env; do
         if env_exists "$name"; then
             ok "$name  [exists]"
         else
@@ -159,14 +162,110 @@ create_amplify_env() {
     info "Step 1/2: Creating Python 3.6 base environment ..."
     conda create -n amplify_env python=3.6 -y
 
+    # NOT "conda activate amplify_env && mamba install ...": conda
+    # activate is a shell function that only exists after conda's shell
+    # hook is sourced, so in a script it fails with CommandNotFoundError
+    # and the && short-circuits — mamba never runs and AMPlify is never
+    # installed. mamba takes -n directly.
     info "Step 2/2: Installing AMPlify via mamba (bioconda::amplify) ..."
-    conda activate amplify_env && mamba install bioconda::amplify -y
+    mamba install -n amplify_env -y bioconda::amplify
 
     # Quick smoke test
     if conda run -n amplify_env AMPlify --help &>/dev/null; then
         ok "amplify_env created and AMPlify is functional."
     else
         fail "AMPlify installed but 'AMPlify --help' failed — check the environment."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# hemo_env
+# ---------------------------------------------------------------------------
+
+create_hemo_env() {
+    echo ""
+    echo "── hemo_env ──────────────────────────────"
+    if env_exists "hemo_env"; then
+        ok "hemo_env already exists — skipping."
+        return 0
+    fi
+    # HemoPI2 is kept out of pega_env on purpose: it pins
+    # scikit-learn==1.3.1, which forces numpy<2 and would downgrade
+    # pega_env's numpy 2.2, breaking its TensorFlow/PyTorch stack.
+    info "Creating hemo_env from envs/hemo_env.yml ..."
+    conda env create -f "${ENVS_DIR}/hemo_env.yml"
+    ok "hemo_env created."
+
+    # Quick smoke test
+    if conda run -n hemo_env hemopi2_classification -h &>/dev/null; then
+        ok "HemoPI2 is functional."
+    else
+        fail "HemoPI2 installed but 'hemopi2_classification -h' failed — check the environment."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# tox_env
+# ---------------------------------------------------------------------------
+
+create_tox_env() {
+    echo ""
+    echo "── tox_env ───────────────────────────────"
+    if env_exists "tox_env"; then
+        ok "tox_env already exists — skipping."
+        return 0
+    fi
+    # ToxinPred3 needs its own environment: its models are pickles fitted
+    # under scikit-learn 1.0.2 and fail to load under >= 1.3, which rules
+    # out both pega_env (>=1.3) and hemo_env (==1.3.1).
+    info "Creating tox_env from envs/tox_env.yml ..."
+    conda env create -f "${ENVS_DIR}/tox_env.yml"
+    ok "tox_env created."
+
+    # Quick smoke test
+    if conda run -n tox_env toxinpred3 -h &>/dev/null && conda run -n tox_env algpred2 -h &>/dev/null; then
+        ok "ToxinPred3 and AlgPred2 are functional."
+    else
+        fail "tox_env created but toxinpred3 or algpred2 failed — check the environment."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# toxipep_env
+# ---------------------------------------------------------------------------
+
+create_toxipep_env() {
+    echo ""
+    echo "── toxipep_env ───────────────────────────"
+    if env_exists "toxipep_env"; then
+        ok "toxipep_env already exists — skipping."
+    else
+        info "Creating toxipep_env from envs/toxipep_env.yml ..."
+        conda env create -f "${ENVS_DIR}/toxipep_env.yml"
+        ok "toxipep_env created."
+    fi
+
+    # ToxiPep is cloned, not vendored: its repository carries no licence
+    # file, so redistributing its code and weights inside this MIT project
+    # would be unlicensed. third_party/ is gitignored.
+    local tp_dir="${SCRIPT_DIR}/third_party/ToxiPep"
+    if [[ -f "${tp_dir}/Code/best_model_0.9.pth" ]]; then
+        ok "ToxiPep already cloned at third_party/ToxiPep — skipping."
+    else
+        info "Cloning ToxiPep into third_party/ToxiPep ..."
+        mkdir -p "${SCRIPT_DIR}/third_party"
+        if git clone --depth 1 https://github.com/GGCL7/ToxiPep "${tp_dir}"; then
+            ok "ToxiPep cloned."
+        else
+            fail "Could not clone ToxiPep — the predictor will report itself unavailable."
+            return 0
+        fi
+    fi
+
+    if conda run -n toxipep_env python -c "import torch, rdkit" &>/dev/null; then
+        ok "ToxiPep is functional."
+    else
+        fail "toxipep_env created but 'import torch, rdkit' failed — check the environment."
     fi
 }
 
@@ -194,13 +293,16 @@ TARGET="${1:-all}"
 
 case "$TARGET" in
     --status)   show_status ;;
-    all)        create_pega_env; create_macrel_env; create_amplify_env ;;
+    all)        create_pega_env; create_macrel_env; create_amplify_env; create_hemo_env; create_tox_env; create_toxipep_env ;;
     pega)       create_pega_env ;;
     macrel)     create_macrel_env ;;
     amplify)    create_amplify_env ;;
+    hemo)       create_hemo_env ;;
+    tox)        create_tox_env ;;
+    toxipep)    create_toxipep_env ;;
     *)
         echo "Unknown argument: $TARGET"
-        echo "Usage: bash setup_environments.sh [all|pega|macrel|amplify|--status]"
+        echo "Usage: bash setup_environments.sh [all|pega|macrel|amplify|hemo|tox|toxipep|--status]"
         exit 1
         ;;
 esac

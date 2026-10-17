@@ -1,14 +1,22 @@
 name: amplify_env
 channels:
-  - bioconda
+  # conda-forge before bioconda, and nodefaults, for the same reason as
+  # macrel_env.yml — bioconda still ships a 2017-era urllib3 that shadows
+  # conda-forge's under strict channel priority.
   - conda-forge
-  - defaults
+  - bioconda
+  - nodefaults
 
+# This file only bootstraps the Python 3.6 interpreter. AMPlify itself
+# is NOT installable from here: conda/libmamba cannot resolve its old
+# dependency tree, so setup_environments.sh adds it with mamba after
+# creating the environment. Creating this environment from the yml alone
+# leaves you without AMPlify.
+#
 # AMPlify requires Python 3.6. The recommended install method is:
 #
 #   conda create -n amplify_env python=3.6 -y
-#   conda activate amplify_env
-#   mamba install bioconda::amplify
+#   mamba install -n amplify_env bioconda::amplify
 #
 # mamba is required because conda/libmamba cannot resolve the old
 # Python 3.6 + TensorFlow 1.12 dependency tree.
