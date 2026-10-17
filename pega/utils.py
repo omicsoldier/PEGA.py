@@ -199,7 +199,10 @@ def screen_sequences(
     fasta_path : str or Path
         Input FASTA file (any size).
     output_dir : str or Path or None
-        Output directory. Default: ``PEGA_screen_YYYYMMDD_HHMMSS/``.
+        Where to write the output folder. ``None`` writes
+        ``results_PEGA/PEGA_screen_<timestamp>/``. An explicit path is
+        used verbatim and its parent directories are created — the same
+        rule ``calculate_scores`` applies to ``export_tsv``.
     chunk_size : int
         Valid sequences per chunk. Default 50,000.
         Reduce to 10,000 if RAM < 16 GB.

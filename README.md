@@ -357,6 +357,7 @@ PEGA score --fasta sequences.fasta \
 
 # Large dataset screening
 PEGA screen --fasta large.fasta \
+    --out cribado1/ \
     --chunk 50000 \
     --ensembles AMP_screen AFP_screen APP_screen ABP_screen \
     --no-individual-scores \
@@ -390,6 +391,11 @@ results_PEGA/PEGA_screen_YYYYMMDD_HHMMSS/
 ├── rejected.fasta  # FASTA of rejected sequences
 └── scores.tsv      # pep_id | activity scores | ensemble scores | liability scores
 ```
+
+`--out` works the same way here as in `PEGA score` (`--dir` is still
+accepted as an alias): without it the folder goes under `results_PEGA/`
+with a timestamped name, and an explicit path is used exactly as given,
+creating any missing parent directories.
 
 Join scores ↔ names on `pep_id`:
 

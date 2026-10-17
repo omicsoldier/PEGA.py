@@ -257,7 +257,7 @@ def cmd_screen(args: argparse.Namespace) -> int:
     try:
         screen_sequences(
             fasta_path=fasta,
-            output_dir=getattr(args, "dir", None),
+            output_dir=getattr(args, "out", None),
             chunk_size=args.chunk,
             exclude_predictors=args.exclude or None,
             ensemble_names=ensemble_names,
@@ -320,6 +320,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "  PEGA score --fasta sequences.fasta --quiet\n"
             "  PEGA score --fasta sequences.fasta --ensembles AMP_class\n"
             "  PEGA score --fasta sequences.fasta --ensembles AMP_screen ABP_screen --no-individual-scores\n"
+            "  PEGA screen --fasta large.fasta --out cribado1/ --chunk 10000\n"
             "  PEGA setup --status\n"
             "  PEGA download-models\n"
         ),
@@ -368,8 +369,11 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     scrp.add_argument("--fasta", "-f", required=True, metavar="FILE")
-    scrp.add_argument("--dir", metavar="PATH",
-                      help="Output directory. Default: PEGA_screen_YYYYMMDD_HHMMSS/ "
+    # Same flag as "PEGA score" so the two commands read alike; --dir is
+    # kept as an alias because earlier versions only had that spelling.
+    scrp.add_argument("--out", "-o", "--dir", dest="out", metavar="PATH",
+                      help="Output directory. Default: "
+                           "results_PEGA/PEGA_screen_<timestamp>/ "
                            "Contains: names.tsv, rejected.tsv, rejected.fasta, scores.tsv")
     scrp.add_argument("--chunk", type=int, default=50_000, metavar="N",
                       help="Sequences per chunk (default: 50,000). Reduce to 10,000 if RAM < 16 GB. "
