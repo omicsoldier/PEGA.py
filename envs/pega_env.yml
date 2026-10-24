@@ -36,4 +36,13 @@ dependencies:
       - pandas>=2.0
       - scikit-learn>=1.3
       - modlamp>=4.3.2
+      # AlgPred3 (allergenicity). Pinned like the other Raghava-group
+      # packages: the CLI is a thin wrapper whose flags have changed
+      # between releases. Its own requirements list only pandas and
+      # joblib, but unpickling the model needs scikit-learn (above) —
+      # the model was fitted under 1.4.2 and loads on >= 1.3.
+      #
+      # The 6 kB wheel downloads ~210 MB of model and feature binary on
+      # first use; setup_environments.sh warms that up.
+      - algpred3==1.3
       # amPEPpy is not published on PyPI — must be installed from git (see README)

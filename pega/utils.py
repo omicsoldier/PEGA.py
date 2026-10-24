@@ -44,6 +44,7 @@ _LIABILITY_GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "allergenicity": (
         "algpred2_score",
+        "algpred3_score",
     ),
 }
 

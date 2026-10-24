@@ -9,7 +9,8 @@ programmatically.
 
 Environments managed
 --------------------
-pega_env      Main environment — all pip-installable predictors.
+pega_env      Main environment — all pip-installable predictors,
+              AlgPred3 (allergenicity) among them.
 macrel_env    Macrel predictor (bioconda).
 amplify_env   AMPlify predictor (bioconda).
 hemo_env      HemoPI2 haemolysis predictor (pip).
@@ -35,8 +36,14 @@ _ENVS_DIR = Path(__file__).resolve().parent.parent / "envs"
 _ENVIRONMENTS = {
     "pega_env": {
         "yml": _ENVS_DIR / "pega_env.yml",
-        "description": "Main PEGA environment (TensorFlow, PyTorch, modlAMP, amPEPpy)",
+        "description": "Main PEGA environment (TensorFlow, PyTorch, modlAMP, "
+                       "amPEPpy, AlgPred3)",
         "check_cmd": ["python", "--version"],
+        # AlgPred3's wheel carries no model — it fetches ~210 MB on first
+        # use. Warming it up here keeps a screening run from stopping to
+        # download, and surfaces a missing network connection at setup.
+        "note": "AlgPred3 downloads its model on first use: "
+                "bash setup_environments.sh pega (or just run it once)",
     },
     "macrel_env": {
         "yml": _ENVS_DIR / "macrel_env.yml",

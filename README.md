@@ -53,8 +53,9 @@ saved automatically as TSV files. It supports datasets from a few sequences up t
 | 13 | ToxiPep | BiGRU/Transformer + atomic graph — **toxicity** | `toxipep_env` + checkout |
 | 14 | AlgPred2 | **Allergenicity**, not activity | `tox_env` |
 | 15 | HemoPI2 (ESM2) | ESM2-t6 — **haemolysis**, not activity | `hemo_env` |
+| 16 | AlgPred3 | Extra Trees on peptides — **allergenicity**, not activity | `pega_env` |
 
-Predictors 1–10 score antimicrobial activity. Predictors 11–15 score
+Predictors 1–10 score antimicrobial activity. Predictors 11–16 score
 different endpoints — liabilities rather than activity — and are
 described under [Output](#liability-columns).
 
@@ -111,20 +112,20 @@ out-of-fold, not the in-sample figure.
 
 ### What gets installed
 
-PEGA runs 15 predictors across 6 conda environments. Each external tool
+PEGA runs 16 predictors across 6 conda environments. Each external tool
 is pinned in its own environment because their dependencies genuinely
 conflict — the notes under each step explain why.
 
 | Environment | Predictors | Why separate |
 |-------------|-----------|--------------|
-| `pega_env` | 1–5, 9, 10 (AMPnet, amPEPpy, ampir ×2, AMP_CG, modlAMP ×2) | Main environment; also hosts the R/ampir install |
+| `pega_env` | 1–5, 9, 10, 16 (AMPnet, amPEPpy, ampir ×2, AMP_CG, modlAMP ×2, AlgPred3) | Main environment; also hosts the R/ampir install |
 | `macrel_env` | 6 (Macrel + its haemolysis score) | bioconda package, pinned sklearn/numpy/scipy |
 | `amplify_env` | 7, 8 (AMPlify balanced/imbalanced) | Needs Python 3.6 |
 | `hemo_env` | 11, 15 (HemoPI2 RF and ESM2) | Pins `scikit-learn==1.3.1` |
 | `tox_env` | 12, 14 (ToxinPred3, AlgPred2) | Pins `scikit-learn==1.0.2` + `numpy==1.22.4` |
 | `toxipep_env` | 13 (ToxiPep) | Pins `numpy<2` for rdkit; the tool itself is cloned, not installed |
 
-Predictors 1–10 score antimicrobial **activity**. Predictors 11–15 score
+Predictors 1–10 score antimicrobial **activity**. Predictors 11–16 score
 **liabilities** — haemolysis, toxicity, allergenicity — where a higher
 score is worse. See [Liability columns](#liability-columns).
 
@@ -179,6 +180,19 @@ PEGA list
 > If `PEGA list` shows the bundled predictors (AMPnet, AMP_CG, amPEPpy,
 > modlAMP) as unavailable, the Git LFS weights did not come down — see
 > the note in Step 1.
+
+> **AlgPred3** (predictor 16) is installed by the yml, but its 6 kB wheel
+> carries no model: it downloads ~210 MB into its own site-packages the
+> first time it runs. Get that out of the way now, rather than in the
+> middle of a screening run:
+>
+> ```bash
+> cd "$(mktemp -d)" && printf '>w\nGIGKFLHSAKKFGKAFVGEIMNS\n' > w.fasta
+> algpred3 -i w.fasta -o w.csv -j pred
+> ```
+>
+> `bash setup_environments.sh pega` does this for you. Run it from a
+> scratch directory either way — AlgPred3 leaves working files behind.
 
 > The yml pins **Python 3.10** — required for TensorFlow and modlAMP
 > compatibility. Do not change this to 3.11/3.12.
@@ -412,7 +426,7 @@ All scores are probabilities in `[0, 1]`. Higher = more likely antimicrobial
 <a id="liability-columns"></a>
 ### Liability columns — higher is *worse*
 
-Three columns score a risk rather than antimicrobial activity. They are
+Seven columns score a risk rather than antimicrobial activity. They are
 triage flags, to help you drop promising-but-risky candidates.
 
 | Column | Endpoint | Source |
@@ -423,6 +437,7 @@ triage flags, to help you drop promising-but-risky candidates.
 | `toxinpred3_score` | Is a toxin | ToxinPred3 Extra Trees (`tox_env`) |
 | `toxipep_score` | Is a toxin | ToxiPep (`toxipep_env` + your own checkout) |
 | `algpred2_score` | Provokes an allergic response | AlgPred 2.0 (`tox_env`, shared with ToxinPred3) |
+| `algpred3_score` | Provokes an allergic response | AlgPred 3.0 (`pega_env`), trained on peptides |
 
 **None is consumed by any ensemble**, and all are dropped by
 `--no-individual-scores`, which keeps only `ensemble_*` columns. They sit
@@ -439,10 +454,25 @@ on HemoPI2 but 1.00 on ToxinPred3; melittin, actual bee venom, scores
 is not on its own a safety finding — many membrane-active AMPs sit in
 ToxinPred's positive set. Read the columns together, not as substitutes.
 
-`algpred2_score` needs reading with care: AlgPred 2.0 was trained on
-allergenic *proteins*, and on a 25-peptide panel its scores spanned only
-0.27–0.43, a narrow band around its own 0.3 cutoff. Treat it as a flag to
-follow up, not a verdict.
+**The two allergenicity columns are two training sets, not two versions.**
+AlgPred 2.0 learned from allergenic *proteins*: on a 25-peptide panel its
+scores spanned only 0.27–0.43, a narrow band around its own 0.3 cutoff,
+so peptide-sized input leaves it with little to say. AlgPred 3.0 was
+trained on curated allergenic and non-allergenic *peptides*, and spreads
+accordingly — 0.15–0.77 over 1000 random 8–42-mers, against a 0.5 cutoff.
+Prefer `algpred3_score` for ranking; keep both and read the disagreement,
+as with HemoPI2's two models. Either way, treat allergenicity as a flag
+to follow up, not a verdict.
+
+`algpred3_score` costs about **0.19 s per sequence** — measured over 10,
+200 and 1000 sequences — which makes AlgPred3 the second slowest
+predictor after AMPlify. PEGA splits the input across concurrent
+subprocesses to absorb that (a quarter of the cores by default, override
+with `PEGA_ALGPRED3_SHARDS`), but on a multi-million-sequence screen it
+still dominates the run: leave it out with `--exclude algpred3` and score
+the shortlist afterwards. Its 6 kB wheel also downloads ~210 MB of model
+and feature binary the first time it runs; `setup_environments.sh` warms
+that up so a screen never stops to download.
 
 Caveats on `hemopi2_score`: HemoPI2 truncates sequences longer than 40
 residues to their first 40 before scoring, and its own cutoff is 0.46,
@@ -548,7 +578,7 @@ naming the problem rather than letting that run.
 ```
 PEGA/
 ├── envs/
-│   ├── pega_env.yml          # main environment
+│   ├── pega_env.yml          # main environment (incl. AlgPred3)
 │   ├── macrel_env.yml        # Macrel predictor
 │   ├── amplify_env.yml       # AMPlify (Python 3.6 base only)
 │   ├── hemo_env.yml          # HemoPI2 (RF + ESM2)
