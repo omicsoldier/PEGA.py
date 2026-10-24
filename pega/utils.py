@@ -16,40 +16,20 @@ from pathlib import Path
 import pandas as pd
 from rich.console import Console
 
+from pega.cutoffs import (
+    LIABILITY_COLUMNS,
+    VERDICT_COLUMN,
+    compute_verdict,
+    order_columns,
+)
 from pega.registry import registry
 
 _CANONICAL_SET = set("ACDEFGHIKLMNPQRSTVWY")
 _console = Console()
 
-# Liability columns: these score a risk (haemolysis, toxicity) rather than
-# antimicrobial activity, so higher is worse. They are moved to the end of
-# the output so the activity scores and ensembles read as one block. Add
-# new haemolysis or toxicity columns here.
 # Default parent folder for results. Only used when the caller does not
 # name an output path of its own.
 _DEFAULT_RESULTS_DIR = "results_PEGA"
-
-# Liability columns by endpoint, in the order they appear in the output.
-# These score a risk rather than antimicrobial activity, so higher is
-# worse. Add new ones to the group they belong to.
-_LIABILITY_GROUPS: dict[str, tuple[str, ...]] = {
-    "hemolysis": (
-        "hemolysis_macrel_score",
-        "hemopi2_score",
-        "hemopi2_esm_score",
-    ),
-    "toxicity": (
-        "toxinpred3_score",
-        "toxipep_score",
-    ),
-    "allergenicity": (
-        "algpred2_score",
-    ),
-}
-
-_LIABILITY_COLUMNS = tuple(
-    col for cols in _LIABILITY_GROUPS.values() for col in cols
-)
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +153,7 @@ def screen_sequences(
     exclude_predictors: list[str] | None = None,
     ensemble_names: list[str] | None = None,
     no_individual_scores: bool = False,
+    verdict: bool = True,
     jobs: int = -1,
 ) -> dict[str, Path]:
     """Score a large FASTA file in chunks — optimised for 1M+ sequences.
@@ -191,7 +172,8 @@ def screen_sequences(
         FASTA file of the rejected sequences.
 
     ``scores.tsv``
-        ``pep_id`` | predictor scores | ensemble scores.
+        ``pep_id`` | ``verdict`` | predictor scores | ensemble scores |
+        liability scores.
         Join with ``names.tsv`` on ``pep_id`` to recover original headers.
 
     Parameters
@@ -212,7 +194,11 @@ def screen_sequences(
         Ensembles to compute. ``None`` = all.
         Auto-selects required predictors when specified.
     no_individual_scores : bool
-        Keep only ensemble columns in ``scores.tsv``.
+        Keep only identifier, ``verdict`` and ensemble columns in
+        ``scores.tsv``.
+    verdict : bool
+        Add the ``PASS``/``FAIL`` ``verdict`` column — see
+        :mod:`pega.cutoffs`.
     jobs : int
         Parallel workers. Default -1 = 75%% of CPU threads.
 
@@ -335,6 +321,7 @@ def screen_sequences(
                 exclude_predictors=exclude_predictors,
                 ensemble_names=ensemble_names,
                 no_individual_scores=no_individual_scores,
+                verdict=verdict,
                 jobs=jobs,
                 validate=False,
                 quiet=True,
@@ -411,6 +398,7 @@ def calculate_scores(
     quiet: bool = False,
     ensemble_names: list[str] | None = None,
     no_individual_scores: bool = False,
+    verdict: bool = True,
     _skip_prepare: bool = False,
     _no_export: bool = False,
 ) -> pd.DataFrame:
@@ -448,15 +436,21 @@ def calculate_scores(
         list computes none — the two are *not* interchangeable. Unknown
         names warn rather than raise.
     no_individual_scores : bool
-        Keep only identifier and ``ensemble_*`` columns in the output.
-        Liability columns are individual scores and are dropped too.
+        Keep only identifier, ``verdict`` and ``ensemble_*`` columns in
+        the output. Liability columns are individual scores and are
+        dropped too — but the verdict is computed before they go, so it
+        still reflects them.
+    verdict : bool
+        Add the ``verdict`` column: ``PASS`` for a sequence that looks
+        active and clears every liability cutoff it was measured on,
+        ``FAIL`` otherwise. See :mod:`pega.cutoffs` for the rules.
 
     Returns
     -------
     pd.DataFrame
-        One row per sequence: identifiers, activity scores, ensemble
-        scores, then the liability columns (haemolysis, toxicity,
-        allergenicity), which run higher-is-worse.
+        One row per sequence, columns grouped: identifiers, ``verdict``,
+        activity scores, ensemble scores, then the liability groups —
+        haemolysis, toxicity, allergenicity — which run higher-is-worse.
 
     Raises
     ------
@@ -553,7 +547,7 @@ def calculate_scores(
     # both paths; only the parallel one used to print anything.
     n_liability = sum(
         1 for cls in predictor_classes
-        if cls.score_column() in _LIABILITY_COLUMNS
+        if cls.score_column() in LIABILITY_COLUMNS
     )
     split = (
         f" ([bold]{total - n_liability}[/bold] activity, "
@@ -657,18 +651,21 @@ def calculate_scores(
         if valid_ens:
             merged = compute_ensembles(merged, ensemble_names=valid_ens)
 
-    # ── Liability columns last ────────────────────────────────────────
-    liability_cols = [c for c in _LIABILITY_COLUMNS if c in merged.columns]
-    if liability_cols:
-        merged = merged[
-            [c for c in merged.columns if c not in liability_cols]
-            + liability_cols
-        ]
+    # ── PASS/FAIL verdict ─────────────────────────────────────────────
+    # Computed before anything is dropped, so that --no-individual-scores
+    # still gets a verdict that took the liabilities into account.
+    if verdict:
+        merged[VERDICT_COLUMN] = compute_verdict(merged)
+
+    # ── Group the columns ─────────────────────────────────────────────
+    # Identifiers, verdict, activity, ensembles, then the liability
+    # groups (haemolysis, toxicity, allergenicity).
+    merged = merged[order_columns(merged)]
 
     # ── Drop individual scores if requested ───────────────────────────
     if no_individual_scores:
         ens_cols = [c for c in merged.columns if c.startswith("ensemble_")]
-        id_cols  = [c for c in ("seq_name", "original_header")
+        id_cols  = [c for c in ("seq_name", "original_header", VERDICT_COLUMN)
                     if c in merged.columns]
         merged   = merged[id_cols + ens_cols]
 

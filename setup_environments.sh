@@ -69,6 +69,15 @@ show_status() {
         else
             fail "ampir R package  [not installed]"
         fi
+
+        # AlgPred3 also lives inside pega_env rather than one of its own.
+        # Looked up rather than run: "algpred3 -h" exits 0 but leaves a
+        # tmp/ directory behind in whatever directory it was called from.
+        if conda run -n pega_env bash -c 'command -v algpred3' &>/dev/null; then
+            ok "algpred3  [installed inside pega_env]"
+        else
+            fail "algpred3  [not installed]"
+        fi
     fi
     echo ""
 }
@@ -108,6 +117,35 @@ create_pega_env() {
         info "  conda install -n pega_env -c conda-forge r-caret r-data.table r-recipes r-modelmetrics r-ipred -y"
         info "  \$CONDA_PREFIX/bin/Rscript -e 'install.packages(\"ampir\", repos=\"https://cloud.r-project.org\")'"
     fi
+
+    warm_up_algpred3
+}
+
+# AlgPred3's wheel carries no model: it fetches ~210 MB (model, feature
+# binary, column list) into its own site-packages the first time it runs.
+# Doing that here means a screening run never stops to download, and a
+# machine without network access finds out now rather than mid-run.
+warm_up_algpred3() {
+    info "Warming up AlgPred3 (downloads ~210 MB on first use) ..."
+
+    local warm_dir
+    warm_dir="$(mktemp -d)"
+    printf '>warmup\nGIGKFLHSAKKFGKAFVGEIMNS\n' > "${warm_dir}/warmup.fasta"
+
+    # Run inside the temp directory: AlgPred3 and pfeature_comp drop
+    # scratch files into the working directory.
+    if ( cd "${warm_dir}" && conda run -n pega_env algpred3 \
+            -i "${warm_dir}/warmup.fasta" \
+            -o "${warm_dir}/warmup.csv" -j pred ) &>/dev/null \
+       && [ -s "${warm_dir}/warmup.csv" ]; then
+        ok "AlgPred3 ready."
+    else
+        fail "AlgPred3 could not score a test sequence."
+        info "  Try: conda run -n pega_env algpred3 -i seqs.fasta -o out.csv -j pred"
+        info "  It needs network access on first use, and scikit-learn,"
+        info "  which it does not declare as a dependency."
+    fi
+    rm -rf "${warm_dir}"
 }
 
 # ---------------------------------------------------------------------------
