@@ -354,6 +354,9 @@ conda activate pega_env
 # Check predictors
 PEGA list
 
+# Show the PASS/FAIL cutoffs
+PEGA list --cutoffs
+
 # Validate FASTA
 PEGA validate --fasta sequences.fasta
 
@@ -388,7 +391,7 @@ PEGA screen --fasta large.fasta \
 results_PEGA/PEGA_results_YYYYMMDD_HHMMSS.tsv
 ```
 
-Columns: `seq_name` | `original_header` | activity scores | ensemble scores | liability scores
+Columns: `seq_name` | `original_header` | [`verdict`](#verdict) | activity scores | ensemble scores | liability scores
 
 Written to `results_PEGA/` unless `--out` names another path. Scores are
 rounded to 5 decimals in the file; the DataFrame returned by the Python
@@ -403,7 +406,7 @@ results_PEGA/PEGA_screen_YYYYMMDD_HHMMSS/
 ├── names.tsv       # pep_id | original_header | length
 ├── rejected.tsv    # original_header | length | reason
 ├── rejected.fasta  # FASTA of rejected sequences
-└── scores.tsv      # pep_id | activity scores | ensemble scores | liability scores
+└── scores.tsv      # pep_id | verdict | activity | ensembles | liabilities
 ```
 
 `--out` works the same way here as in `PEGA score` (`--dir` is still
@@ -420,8 +423,68 @@ scores = pd.read_csv("PEGA_screen_*/scores.tsv", sep="\t")
 df     = scores.merge(names, on="pep_id")
 ```
 
+Columns come out grouped, always in this order: identifiers, `verdict`,
+activity scores, ensembles, then the liability groups — haemolysis,
+toxicity, allergenicity. A column that did not run is simply absent; the
+order of the rest does not change.
+
 All scores are probabilities in `[0, 1]`. Higher = more likely antimicrobial
-— except for the three liability columns.
+— except for the liability columns.
+
+<a id="verdict"></a>
+### The `verdict` column — PASS or FAIL
+
+One column that answers "is this worth carrying forward?", so you do not
+have to apply seven cutoffs by hand. `PASS` means the peptide looks
+active **and** clears every liability it was measured on:
+
+| Group | Column | Passes when |
+|-------|--------|-------------|
+| activity | any activity or ensemble score | `>= 0.5` |
+| haemolysis | `hemolysis_macrel_score` | `< 0.5` |
+| haemolysis | `hemopi2_score` | `< 0.45` |
+| haemolysis | `hemopi2_esm_score` | `< 0.55` |
+| toxicity | `toxinpred3_score` | `< 0.38` |
+| toxicity | `toxipep_score` | `< 0.5` |
+| allergenicity | `algpred2_score` | `< 0.3` |
+| allergenicity | `algpred3_score` | `< 0.3` |
+
+`PEGA list --cutoffs` prints the same table from the code, so it is never
+out of date.
+
+The two kinds of test behave differently on purpose. **Activity is a
+vote**: one predictor or ensemble at `>= 0.5` is enough, because they
+disagree constantly and requiring consensus would reject nearly
+everything. **Liabilities are vetoes**: one high haemolysis score drops
+the peptide however active it looks.
+
+**A column that is not there is a test that never ran** — the predictor
+is not installed, or you left it out with `--exclude` — so it is skipped
+rather than failed. Running without HemoPI2 does not fail every peptide
+for haemolysis, and a run with only one of the two allergenicity columns
+is judged on that one.
+
+**A missing value in a column that *is* there is different**: the
+predictor ran and returned nothing for that sequence, so there is no
+evidence it clears the cutoff and the row gets `FAIL`. This is rare —
+PEGA validates the FASTA before scoring — and when it happens it marks a
+sequence something went wrong on.
+
+The verdict is computed before `--no-individual-scores` drops anything,
+so that flag still gives you a verdict that took the liabilities into
+account. Leave the column out entirely with `--no-verdict`.
+
+```bash
+# keep only what passed
+awk -F'\t' 'NR==1 || $3=="PASS"' results_PEGA/PEGA_results_*.tsv > passed.tsv
+```
+
+```python
+passed = df[df["verdict"] == "PASS"]
+```
+
+The cutoffs live in `pega/cutoffs.py`, one table — change a number there
+and the verdict, `PEGA list --cutoffs` and every output follow.
 
 <a id="liability-columns"></a>
 ### Liability columns — higher is *worse*
@@ -440,9 +503,10 @@ triage flags, to help you drop promising-but-risky candidates.
 | `algpred3_score` | Provokes an allergic response | AlgPred 3.0 (`pega_env`), trained on peptides |
 
 **None is consumed by any ensemble**, and all are dropped by
-`--no-individual-scores`, which keeps only `ensemble_*` columns. They sit
-at the end of the table, after the ensembles, so the activity columns
-read as one block.
+`--no-individual-scores`, which keeps only the identifiers, `verdict` and
+`ensemble_*` columns. They sit at the end of the table, after the
+ensembles, so the activity columns read as one block. Each has a cutoff
+that feeds the [`verdict`](#verdict) column.
 
 **Haemolysis and toxicity are not interchangeable**, which is why they
 are separate columns. Haemolysis is one specific mechanism — erythrocyte
@@ -590,6 +654,7 @@ PEGA/
 │   ├── population/           # GA population management
 │   ├── preprocess/           # FASTA validation
 │   ├── ensemble.py           # validated ensemble scores
+│   ├── cutoffs.py            # PASS/FAIL cutoffs + column grouping
 │   ├── utils.py              # scoring + screen orchestration
 │   └── cli.py                # PEGA CLI
 ├── tests/

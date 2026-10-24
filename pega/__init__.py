@@ -24,6 +24,7 @@ def score(
     predictors: list[str] | None = None,
     exclude: list[str] | None = None,
     ensemble: bool = True,
+    verdict: bool = True,
     export_tsv: str | None = None,
 ):
     """Score sequences in a FASTA file using available AMP predictors.
@@ -43,6 +44,11 @@ def score(
         If ``True`` (default), validated ensemble scores are appended
         to the output DataFrame. If ``False``, only individual predictor
         scores are returned.
+    verdict:
+        If ``True`` (default), a ``verdict`` column of ``PASS``/``FAIL``
+        is added, summarising whether the sequence looks active and
+        clears every liability cutoff it was measured on. See
+        :mod:`pega.cutoffs` for the rules.
     export_tsv:
         Where to write results as TSV. When omitted nothing is written
         and the DataFrame is simply returned — unlike ``PEGA score`` on
@@ -51,8 +57,9 @@ def score(
     Returns
     -------
     pandas.DataFrame
-        One row per sequence, one column per predictor score, plus
-        ensemble score columns when ``ensemble=True``.
+        One row per sequence, columns grouped: identifiers, ``verdict``,
+        activity scores, ensembles, then the liability groups
+        (haemolysis, toxicity, allergenicity).
     """
     from pega.utils import calculate_scores
 
@@ -61,6 +68,7 @@ def score(
         predictor_names=predictors,
         exclude_predictors=exclude,
         ensemble_names=None if ensemble else [],
+        verdict=verdict,
         export_tsv=export_tsv,
         # A library call should hand back data, not write files nobody
         # asked for; calculate_scores on its own defaults to results_PEGA.

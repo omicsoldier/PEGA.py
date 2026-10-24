@@ -137,7 +137,30 @@ def _fasta_stats(fasta_path: Path) -> dict:
 def cmd_list(args: argparse.Namespace) -> int:
     if not args.quiet:
         _print_banner()
-    if args.ensembles:
+    if getattr(args, "cutoffs", False):
+        from pega.cutoffs import ACTIVITY_CUTOFF, LIABILITY_GROUPS, VERDICT_COLUMN
+        table = Table(box=SIMPLE_HEAVY, show_edge=False)
+        table.add_column("Group", style="bold")
+        table.add_column("Column", style="cyan")
+        table.add_column("Passes when")
+        table.add_row(
+            "activity", "any activity or ensemble score",
+            f">= {ACTIVITY_CUTOFF}",
+        )
+        for group, cols in LIABILITY_GROUPS.items():
+            for col, ceiling in cols.items():
+                table.add_row(group, col, f"< {ceiling}")
+        console.print(table)
+        console.print(
+            f"\n  [bold]{VERDICT_COLUMN}[/bold] is PASS when the activity row "
+            "holds [bold]and[/bold] every liability row does."
+        )
+        console.print(
+            "  [dim]A column that is not in the table was never measured, "
+            "so its row is skipped;\n"
+            "  a missing value in a column that is there fails.[/dim]"
+        )
+    elif args.ensembles:
         from pega.ensemble import list_ensembles, ENSEMBLES
         table = Table(box=SIMPLE_HEAVY, show_edge=False)
         table.add_column("Name", style="bold cyan")
@@ -224,6 +247,7 @@ def cmd_score(args: argparse.Namespace) -> int:
             quiet=args.quiet,
             ensemble_names=ensemble_names,
             no_individual_scores=args.no_individual_scores,
+            verdict=not args.no_verdict,
         )
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -262,6 +286,7 @@ def cmd_screen(args: argparse.Namespace) -> int:
             exclude_predictors=args.exclude or None,
             ensemble_names=ensemble_names,
             no_individual_scores=getattr(args, "no_individual_scores", False),
+            verdict=not args.no_verdict,
             jobs=args.jobs,
         )
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
@@ -313,6 +338,7 @@ def _build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Examples:\n"
             "  PEGA list\n"
+            "  PEGA list --cutoffs\n"
             "  PEGA validate --fasta sequences.fasta\n"
             "  PEGA score --fasta sequences.fasta\n"
             "  PEGA score --fasta sequences.fasta --predictors AMPnet modlAMP_RF\n"
@@ -335,6 +361,8 @@ def _build_parser() -> argparse.ArgumentParser:
     lp = sub.add_parser("list", help="Show all predictors and their availability.")
     lp.add_argument("--ensembles", action="store_true", default=False,
                     help="Show available ensemble scores instead of predictors.")
+    lp.add_argument("--cutoffs", action="store_true", default=False,
+                    help="Show the PASS/FAIL cutoffs instead of predictors.")
     lp.add_argument("-q", "--quiet", action="store_true", default=False)
 
     # score
@@ -355,6 +383,8 @@ def _build_parser() -> argparse.ArgumentParser:
                          "Pass 'none' to skip all ensembles. Default: all.")
     sp.add_argument("--no-individual-scores", action="store_true", default=False,
                     help="Output only ensemble columns.")
+    sp.add_argument("--no-verdict", action="store_true", default=False,
+                    help="Leave out the PASS/FAIL 'verdict' column. Default: add it (run 'PEGA list --cutoffs' for the rules).")
     sp.add_argument("-q", "--quiet", action="store_true", default=False,
                     help="Suppress banner and framework warnings.")
 
@@ -386,6 +416,8 @@ def _build_parser() -> argparse.ArgumentParser:
                            "Auto-selects required predictors.")
     scrp.add_argument("--no-individual-scores", action="store_true", default=False,
                       help="Output only ensemble columns.")
+    scrp.add_argument("--no-verdict", action="store_true", default=False,
+                      help="Leave out the PASS/FAIL 'verdict' column. Default: add it (run 'PEGA list --cutoffs' for the rules).")
     scrp.add_argument("--jobs", "-j", type=int, default=-1, metavar="N",
                       help="Parallel workers. Default: -1 (75%% of CPU threads).")
     scrp.add_argument("-q", "--quiet", action="store_true", default=False)

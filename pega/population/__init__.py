@@ -295,13 +295,14 @@ def score_sequences(
     scored["seq_aa"] = scored["seq_name"].map(seq_map)
     scored = compute_fitness(scored)
 
-    # Reorder: identifiers → fitness → predictor scores → ensembles
+    # Reorder: identifiers → fitness → verdict → predictor scores → ensembles
+    from pega.cutoffs import VERDICT_COLUMN
     predictor_cols = [c for c in scored.columns
                       if c.endswith("_score") and not c.startswith("ensemble_")]
     ensemble_cols  = [c for c in scored.columns if c.startswith("ensemble_")]
 
     cols = (
-        ["seq_name", "seq_aa", "mean_geometric"]
+        ["seq_name", "seq_aa", "mean_geometric", VERDICT_COLUMN]
         + predictor_cols
         + ensemble_cols
     )
@@ -343,7 +344,7 @@ def compute_fitness(
     exclude = {"seq_name", "seq_aa", "original_header", "mean_geometric"}
 
     if fitness is not None:
-        from pega.utils import _LIABILITY_COLUMNS
+        from pega.cutoffs import LIABILITY_COLUMNS
 
         column = fitness
         if column not in df.columns:
@@ -361,7 +362,7 @@ def compute_fitness(
                 f"Fitness '{fitness}' matches no column in the population. "
                 f"Available: {available}"
             )
-        if column in _LIABILITY_COLUMNS:
+        if column in LIABILITY_COLUMNS:
             raise ValueError(
                 f"'{column}' scores a liability, where higher is worse, and "
                 "the selection operators maximise fitness — using it would "
