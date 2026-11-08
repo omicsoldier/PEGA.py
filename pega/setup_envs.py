@@ -16,7 +16,6 @@ amplify_env   AMPlify predictor (bioconda).
 hemo_env      HemoPI2 haemolysis predictor (pip).
 tox_env       ToxinPred3 toxicity + AlgPred2 allergenicity (pip).
 toxipep_env   ToxiPep toxicity predictor (pip + user checkout).
-ampactipred_env  AMPActiPred antibacterial predictor (pip + checkout).
 
 R / ampir is handled separately since it requires a system R installation.
 """
@@ -78,15 +77,6 @@ _ENVIRONMENTS = {
         # than vendored or pip-installed.
         "note": "ToxiPep itself still needs: bash setup_environments.sh "
                 "toxipep (clones it into third_party/)",
-    },
-    "ampactipred_env": {
-        "yml": _ENVS_DIR / "ampactipred_env.yml",
-        "description": "AMPActiPred antibacterial predictor environment (pip)",
-        "check_cmd": ["python", "-c", "import deepforest, modlamp"],
-        # Same situation as ToxiPep — no licence file upstream — plus the
-        # weights live on the authors' server, not in the repository.
-        "note": "AMPActiPred itself still needs: bash setup_environments.sh "
-                "ampactipred (clones it and downloads the first-stage model)",
     },
 }
 
