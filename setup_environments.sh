@@ -342,10 +342,20 @@ create_ampactipred_env() {
         fi
     fi
 
+    # Checked before the download, not after: the download is the step most
+    # likely to fail (see below), and reporting a broken environment that is
+    # in fact fine sends people after the wrong problem.
+    if conda run -n ampactipred_env python -c "import deepforest, modlamp" &>/dev/null; then
+        ok "ampactipred_env imports deep-forest and modlAMP."
+    else
+        fail "ampactipred_env created but 'import deepforest, modlamp' failed — check the environment."
+        return 0
+    fi
+
     # The weights are not in the repository: they are three tarballs on the
     # authors' server. PEGA uses the first stage only, so only that one is
-    # fetched. A sandboxed or offline machine will fail here; the predictor
-    # then simply reports itself unavailable.
+    # fetched. Without it the predictor simply reports itself unavailable
+    # and the rest of PEGA runs normally.
     local model_dir="${ap_dir}/model/first_stage_model_final"
     if [[ -f "${model_dir}/param.pkl" ]]; then
         ok "First-stage model already present — skipping download."
@@ -354,34 +364,42 @@ create_ampactipred_env() {
         mkdir -p "${ap_dir}/model"
         local url="https://awi.cuhk.edu.cn/~AMPActiPred/download/first_stage_model_final.tar.gz"
         local tarball="${ap_dir}/model/first_stage_model_final.tar.gz"
-        if curl -fL --retry 3 -o "${tarball}" "${url}"; then
+        # Retried with a browser User-Agent because the server has been seen
+        # answering 403 to curl's default one. If the second attempt fails
+        # too, the refusal is about something else and the manual route
+        # below is the way in.
+        local ua='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        if curl -fL --retry 3 -o "${tarball}" "${url}" \
+           || curl -fL --retry 3 -A "${ua}" -o "${tarball}" "${url}"; then
             # The tarball's top level is the model directory itself.
             if tar xzf "${tarball}" -C "${ap_dir}/model"; then
                 rm -f "${tarball}"
                 ok "First-stage model extracted."
             else
-                fail "Could not extract ${tarball}."
+                fail "Could not extract ${tarball} — it may be an error page, not a tarball."
+                info "  Inspect it with: file ${tarball}"
                 return 0
             fi
         else
+            rm -f "${tarball}"
             fail "Could not download the first-stage model from awi.cuhk.edu.cn."
-            info "  Download it by hand and extract it into:"
+            info "  The environment is ready — only the weights are missing."
+            info "  Open this page in a browser and take the first-stage link:"
+            info "    https://awi.cuhk.edu.cn/~AMPActiPred/"
+            info "  then extract it into:"
             info "    ${ap_dir}/model/"
-            info "  so that ${model_dir}/param.pkl exists."
+            info "  so that ${model_dir}/param.pkl exists, and run this again."
             return 0
         fi
     fi
 
-    if [[ ! -f "${model_dir}/param.pkl" ]]; then
-        fail "Expected the model at ${model_dir} — check how the tarball extracted."
-        info "  The predictor needs param.pkl, binner.pkl and estimator/ there."
-        return 0
-    fi
-
-    if conda run -n ampactipred_env python -c "import deepforest, modlamp" &>/dev/null; then
+    if [[ -f "${model_dir}/param.pkl" ]]; then
         ok "AMPActiPred is functional."
     else
-        fail "ampactipred_env created but 'import deepforest, modlamp' failed — check the environment."
+        fail "Expected the model at ${model_dir} — check how the tarball extracted."
+        info "  The predictor needs param.pkl, binner.pkl and estimator/ there."
+        info "  If the tarball unpacked into a differently-named folder, rename"
+        info "  it to first_stage_model_final."
     fi
 }
 
