@@ -12,6 +12,7 @@
 #   bash setup_environments.sh hemo       # create only hemo_env
 #   bash setup_environments.sh tox        # create only tox_env
 #   bash setup_environments.sh toxipep    # create only toxipep_env
+#   bash setup_environments.sh ampactipred  # create only ampactipred_env
 #   bash setup_environments.sh --status   # show environment status
 #
 # After running this script, activate the main environment and install PEGA:
@@ -52,7 +53,8 @@ show_status() {
     echo ""
     echo "PEGA environment status"
     echo "────────────────────────────────────────"
-    for name in pega_env macrel_env amplify_env hemo_env tox_env toxipep_env; do
+    for name in pega_env macrel_env amplify_env hemo_env tox_env toxipep_env \
+                ampactipred_env; do
         if env_exists "$name"; then
             ok "$name  [exists]"
         else
@@ -308,6 +310,82 @@ create_toxipep_env() {
 }
 
 # ---------------------------------------------------------------------------
+# ampactipred_env
+# ---------------------------------------------------------------------------
+
+create_ampactipred_env() {
+    echo ""
+    echo "── ampactipred_env ───────────────────────"
+    if env_exists "ampactipred_env"; then
+        ok "ampactipred_env already exists — skipping."
+    else
+        # Needs its own environment: deep-forest has no wheel past
+        # CPython 3.9, and 0.1.5 needs scikit-learn 1.0.x. See the yml.
+        info "Creating ampactipred_env from envs/ampactipred_env.yml ..."
+        conda env create -f "${ENVS_DIR}/ampactipred_env.yml"
+        ok "ampactipred_env created."
+    fi
+
+    # Cloned, not vendored, for the same reason as ToxiPep: the repository
+    # carries no licence file. third_party/ is gitignored.
+    local ap_dir="${SCRIPT_DIR}/third_party/AMPActiPred"
+    if [[ -f "${ap_dir}/predict.py" ]]; then
+        ok "AMPActiPred already cloned at third_party/AMPActiPred — skipping."
+    else
+        info "Cloning AMPActiPred into third_party/AMPActiPred ..."
+        mkdir -p "${SCRIPT_DIR}/third_party"
+        if git clone --depth 1 https://github.com/lantianyao/AMPActiPred "${ap_dir}"; then
+            ok "AMPActiPred cloned."
+        else
+            fail "Could not clone AMPActiPred — the predictor will report itself unavailable."
+            return 0
+        fi
+    fi
+
+    # The weights are not in the repository: they are three tarballs on the
+    # authors' server. PEGA uses the first stage only, so only that one is
+    # fetched. A sandboxed or offline machine will fail here; the predictor
+    # then simply reports itself unavailable.
+    local model_dir="${ap_dir}/model/first_stage_model_final"
+    if [[ -f "${model_dir}/param.pkl" ]]; then
+        ok "First-stage model already present — skipping download."
+    else
+        info "Downloading the first-stage model (this is large) ..."
+        mkdir -p "${ap_dir}/model"
+        local url="https://awi.cuhk.edu.cn/~AMPActiPred/download/first_stage_model_final.tar.gz"
+        local tarball="${ap_dir}/model/first_stage_model_final.tar.gz"
+        if curl -fL --retry 3 -o "${tarball}" "${url}"; then
+            # The tarball's top level is the model directory itself.
+            if tar xzf "${tarball}" -C "${ap_dir}/model"; then
+                rm -f "${tarball}"
+                ok "First-stage model extracted."
+            else
+                fail "Could not extract ${tarball}."
+                return 0
+            fi
+        else
+            fail "Could not download the first-stage model from awi.cuhk.edu.cn."
+            info "  Download it by hand and extract it into:"
+            info "    ${ap_dir}/model/"
+            info "  so that ${model_dir}/param.pkl exists."
+            return 0
+        fi
+    fi
+
+    if [[ ! -f "${model_dir}/param.pkl" ]]; then
+        fail "Expected the model at ${model_dir} — check how the tarball extracted."
+        info "  The predictor needs param.pkl, binner.pkl and estimator/ there."
+        return 0
+    fi
+
+    if conda run -n ampactipred_env python -c "import deepforest, modlamp" &>/dev/null; then
+        ok "AMPActiPred is functional."
+    else
+        fail "ampactipred_env created but 'import deepforest, modlamp' failed — check the environment."
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -331,16 +409,19 @@ TARGET="${1:-all}"
 
 case "$TARGET" in
     --status)   show_status ;;
-    all)        create_pega_env; create_macrel_env; create_amplify_env; create_hemo_env; create_tox_env; create_toxipep_env ;;
+    all)        create_pega_env; create_macrel_env; create_amplify_env; create_hemo_env; \
+                create_tox_env; create_toxipep_env; create_ampactipred_env ;;
     pega)       create_pega_env ;;
     macrel)     create_macrel_env ;;
     amplify)    create_amplify_env ;;
     hemo)       create_hemo_env ;;
     tox)        create_tox_env ;;
     toxipep)    create_toxipep_env ;;
+    ampactipred) create_ampactipred_env ;;
     *)
         echo "Unknown argument: $TARGET"
-        echo "Usage: bash setup_environments.sh [all|pega|macrel|amplify|hemo|tox|toxipep|--status]"
+        echo "Usage: bash setup_environments.sh \
+[all|pega|macrel|amplify|hemo|tox|toxipep|ampactipred|--status]"
         exit 1
         ;;
 esac

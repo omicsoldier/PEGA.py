@@ -54,9 +54,10 @@ saved automatically as TSV files. It supports datasets from a few sequences up t
 | 14 | AlgPred2 | **Allergenicity**, not activity | `tox_env` |
 | 15 | HemoPI2 (ESM2) | ESM2-t6 — **haemolysis**, not activity | `hemo_env` |
 | 16 | AlgPred3 | Extra Trees on peptides — **allergenicity**, not activity | `pega_env` |
+| 17 | AMPActiPred | Deep forest — **antibacterial** activity | `ampactipred_env` + checkout |
 
-Predictors 1–10 score antimicrobial activity. Predictors 11–16 score
-different endpoints — liabilities rather than activity — and are
+Predictors 1–10 and 17 score antimicrobial activity. Predictors 11–16
+score different endpoints — liabilities rather than activity — and are
 described under [Output](#liability-columns).
 
 ## Validated Ensembles
@@ -112,7 +113,7 @@ out-of-fold, not the in-sample figure.
 
 ### What gets installed
 
-PEGA runs 16 predictors across 6 conda environments. Each external tool
+PEGA runs 17 predictors across 7 conda environments. Each external tool
 is pinned in its own environment because their dependencies genuinely
 conflict — the notes under each step explain why.
 
@@ -124,8 +125,9 @@ conflict — the notes under each step explain why.
 | `hemo_env` | 11, 15 (HemoPI2 RF and ESM2) | Pins `scikit-learn==1.3.1` |
 | `tox_env` | 12, 14 (ToxinPred3, AlgPred2) | Pins `scikit-learn==1.0.2` + `numpy==1.22.4` |
 | `toxipep_env` | 13 (ToxiPep) | Pins `numpy<2` for rdkit; the tool itself is cloned, not installed |
+| `ampactipred_env` | 17 (AMPActiPred) | `deep-forest` has no wheel past Python 3.9 and needs `scikit-learn==1.0.2`; cloned, not installed |
 
-Predictors 1–10 score antimicrobial **activity**. Predictors 11–16 score
+Predictors 1–10 and 17 score antimicrobial **activity**. Predictors 11–16 score
 **liabilities** — haemolysis, toxicity, allergenicity — where a higher
 score is worse. See [Liability columns](#liability-columns).
 
@@ -343,6 +345,56 @@ bash setup_environments.sh toxipep
 > `envs/toxipep_env.yml` also departs from ToxiPep's `requirements.txt`,
 > which pins `torch_geometric`, `torch_sparse`, `torch-scatter`,
 > `selenium` and `shap`. None are imported by the prediction path.
+
+**AMPActiPred** (predictor 17, antibacterial activity):
+```bash
+bash setup_environments.sh ampactipred
+```
+
+> Also **cloned, not bundled** — no licence file upstream either — and
+> its weights are not in the repository at all: they are tarballs on the
+> authors' server at `awi.cuhk.edu.cn`. The command clones the repository
+> into `third_party/AMPActiPred` (gitignored) and downloads the
+> first-stage model into `third_party/AMPActiPred/model/`. Set
+> `PEGA_AMPACTIPRED_DIR` only to point at a clone kept elsewhere. On a
+> machine with no outbound access to that host, download
+> `first_stage_model_final.tar.gz` by hand and extract it into
+> `third_party/AMPActiPred/model/`; without it the predictor reports
+> itself unavailable and the rest of PEGA runs normally.
+>
+> It needs an environment of its own, for two independent reasons:
+> `deep-forest` publishes **no wheel past CPython 3.9** for any version,
+> and version 0.1.5 — the one the models were trained with — imports
+> `sklearn.utils.fixes._joblib_parallel_args`, which scikit-learn removed
+> in 1.1. So Python 3.9 with `scikit-learn==1.0.2`, which neither
+> `pega_env` nor `tox_env` (both 3.10) nor `hemo_env` (1.3.1) can host.
+> The yml also departs from the authors' pins twice: `numpy==1.18.5` has
+> no CPython 3.9 wheel (1.19.5 is the nearest that does), and
+> `modlamp==4.3.0` cannot install at all, because it requires
+> `mysql-connector-python==8.0.17`, which has no wheel for any Python
+> this environment can run.
+>
+> **PEGA does not run the upstream `predict.py`.** It does not compile as
+> published: `GAAC`, `GDPC` and `GTPC` were committed with their bodies
+> flattened to column 0, loop and `if`/`else` bodies included, so
+> `python predict.py` raises `IndentationError` before doing anything.
+> Those three are dead code for prediction — only `insert_gngram` reaches
+> them, and `construct_features` never calls it — so PEGA cuts that run
+> of definitions out and reuses the rest of the authors' feature code
+> (553 descriptors: AAC, DPC, CKSAAGP, PAAC, PHYC). Its model paths are
+> hardcoded to `/home/AMPActiPred/...` as well, and it reports stage one
+> as a `true`/`false` label, where PEGA reads `predict_proba` to get a
+> score in [0, 1]. See `pega/runners/ampactipred.py`.
+>
+> **Only the first stage is wired in.** AMPActiPred also predicts which
+> of ten bacterial species a peptide hits (stage two) and the activity
+> level against each (stage three). Stage two would add ten activity
+> columns whose own cutoffs run from 0.05 to 0.85, which the
+> [`verdict`](#verdict) column — a flat `>= 0.5` on any activity
+> column — would read wrongly; stage three returns an activity level
+> rather than a probability in [0, 1], so it does not fit the column
+> convention. Both are worth adding deliberately rather than by
+> extension.
 
 ---
 
@@ -647,9 +699,11 @@ PEGA/
 │   ├── amplify_env.yml       # AMPlify (Python 3.6 base only)
 │   ├── hemo_env.yml          # HemoPI2 (RF + ESM2)
 │   ├── tox_env.yml           # ToxinPred3 + AlgPred2
-│   └── toxipep_env.yml       # ToxiPep
+│   ├── toxipep_env.yml       # ToxiPep
+│   └── ampactipred_env.yml   # AMPActiPred (Python 3.9 + deep-forest)
 ├── pega/
 │   ├── predictors/           # one module per predictor
+│   ├── runners/              # scripts run inside other conda envs
 │   ├── operators/            # GA crossover, mutation, selection
 │   ├── population/           # GA population management
 │   ├── preprocess/           # FASTA validation
